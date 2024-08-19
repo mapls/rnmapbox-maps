@@ -1,0 +1,38 @@
+name: 'publish package to Mapls npm'
+on:
+  release:
+    types: [created]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mapls
+      - name: Read .nvmrc
+        run: echo ::set-output name=NVMRC::$(cat .nvmrc)
+        id: nvm
+      - name: Setup node ${{ steps.nvm.outputs.NVMRC }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.nvm.outputs.NVMRC }}
+      - name: Install dependencies
+        run: npm install --force
+      - name: Authenticate with registry
+        run: |
+          npm install -g -y npm-cli-login
+          npm-cli-login -u cibot -p ${{ secrets.CI_BOT_PASSWORD }} -e support@mapls.ee -r https://registry.mapls.ee
+      - name: Configure .npmrc
+        run: |
+          cat <<EOF >> ~/.npmrc
+          //registry.mapls.ee/:username=cibot
+          //registry.mapls.ee/:_password=$(echo -n \${{ secrets.CI_BOT_PASSWORD }} | base64)
+          //registry.mapls.ee/:email=support@mapls.ee
+          registry=https://registry.mapls.ee
+          EOF
+      - name: Publish to Mapls npm 📦
+        run: npm publish
