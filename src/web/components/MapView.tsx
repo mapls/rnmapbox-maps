@@ -32,6 +32,10 @@ class MapView extends React.Component<
       style: styleURL || 'mapbox://styles/mapbox/streets-v11',
     });
 
+    /* eslint-disable dot-notation */
+    // @ts-expect-error - Do not modify
+    map.touchZoomRotate['_tapDragZoom']['_enabled'] = false;
+
     map.on('mousedown', (e: MapMouseEvent) => {
       // @ts-expect-error - classList is actually present, TypeScript lies.
       if (!e.originalEvent.target.classList.contains('mapboxgl-canvas')) {
