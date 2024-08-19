@@ -1,14 +1,21 @@
-import React, { type JSX } from 'react';
-import mapboxgl from 'mapbox-gl';
+import React from 'react';
+import mapboxgl, { type MapMouseEvent } from 'mapbox-gl';
 
 import MapContext from '../MapContext';
+import * as RNMapView from '../../components/MapView';
 
 /**
  * MapView backed by Mapbox GL KS
  */
 class MapView extends React.Component<
-  { styleURL: string; children: JSX.Element },
-  { map?: object | null }
+  RNMapView.default & {
+    styleURL: string;
+    children: JSX.Element;
+    onPress: (e: GeoJSON.Feature) => void;
+    onCameraChanged: (e: RNMapView.MapState) => void;
+  } & {
+    map?: object | null;
+  }
 > {
   state = { map: null };
   mapContainer: HTMLElement | null = null;
@@ -24,8 +31,57 @@ class MapView extends React.Component<
       container: this.mapContainer,
       style: styleURL || 'mapbox://styles/mapbox/streets-v11',
     });
+
+    map.on('mousedown', (e: MapMouseEvent) => {
+      // @ts-expect-error - classList is actually present, TypeScript lies.
+      if (!e.originalEvent.target.classList.contains('mapboxgl-canvas')) {
+        return;
+      }
+
+      const point: GeoJSON.Feature<GeoJSON.Point> = {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [e.lngLat.lng, e.lngLat.lat],
+        },
+        properties: {},
+      };
+      this.handleMapPress(point);
+    });
+
+    map.on('move', () => {
+      // @ts-expect-error - Partially implement for now.
+      const state: RNMapView.MapState = {
+        properties: {
+          center: [map.getCenter().lng, map.getCenter().lat],
+          zoom: map.getZoom(),
+          pitch: map.getPitch(),
+          heading: map.getBearing(),
+          bounds: {
+            ne: map.getBounds()?.getNorthEast().toArray() ?? [0, 0],
+            sw: map.getBounds()?.getSouthWest().toArray() ?? [0, 0],
+          },
+        },
+      };
+      this.handleCameraChanged(state);
+    });
+
     this.map = map;
     this.setState({ map });
+  }
+
+  handleMapPress(e: GeoJSON.Feature<GeoJSON.Point>) {
+    const { onPress } = this.props;
+    if (onPress) {
+      onPress(e);
+    }
+  }
+
+  handleCameraChanged(e: RNMapView.MapState) {
+    const { onCameraChanged } = this.props;
+    if (onCameraChanged) {
+      onCameraChanged(e);
+    }
   }
 
   render() {
