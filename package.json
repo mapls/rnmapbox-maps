@@ -3,6 +3,7 @@
   "description": "A Mapbox react native module for creating custom maps",
   "version": "10.1.41",
   "publishConfig": {
+    "registry": "https://registry.mapls.ee",
     "access": "public"
   },
   "author": "React Native Mapbox Team",
@@ -16,7 +17,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rnmapbox/maps"
+    "url": "https://github.com/maplshub/rnmapbox-maps"
   },
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
@@ -58,7 +59,7 @@
   },
   "peerDependencies": {
     "expo": ">=47.0.0",
-    "mapbox-gl": "^2.9.0",
+    "mapbox-gl": "^3.6.0",
     "react": ">=16.6.1",
     "react-native": ">=0.59.9",
     "react-dom": ">= 17.0.0"
@@ -141,6 +142,16 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --fix"
   },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      "commonjs",
+      "module",
+      "typescript"
+    ]
+  },
+  "readmeFilename": "README.md",
   "eslintIgnore": [
     "node_modules/",
     "lib/"
