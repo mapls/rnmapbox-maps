@@ -13,6 +13,7 @@ class MapView extends React.Component<
     children: JSX.Element;
     onPress: (e: GeoJSON.Feature) => void;
     onCameraChanged: (e: RNMapView.MapState) => void;
+    onMapIdle: (e: RNMapView.MapState) => void;
   } & {
     map?: object | null;
   }
@@ -53,7 +54,7 @@ class MapView extends React.Component<
       this.handleMapPress(point);
     });
 
-    map.on('move', () => {
+    const currentMapState = () => {
       // @ts-expect-error - Partially implement for now.
       const state: RNMapView.MapState = {
         properties: {
@@ -67,8 +68,12 @@ class MapView extends React.Component<
           },
         },
       };
-      this.handleCameraChanged(state);
-    });
+
+      return state;
+    };
+
+    map.on('move', () => this.handleCameraChanged(currentMapState()));
+    map.on('idle', () => this.handleMapOnIdle(currentMapState()));
 
     this.map = map;
     this.setState({ map });
@@ -85,6 +90,13 @@ class MapView extends React.Component<
     const { onCameraChanged } = this.props;
     if (onCameraChanged) {
       onCameraChanged(e);
+    }
+  }
+
+  handleMapOnIdle(e: RNMapView.MapState) {
+    const { onMapIdle } = this.props;
+    if (onMapIdle) {
+      onMapIdle(e);
     }
   }
 
