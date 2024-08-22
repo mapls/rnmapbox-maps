@@ -31,6 +31,7 @@ class MapView extends React.Component<
     const map = new mapboxgl.Map({
       container: this.mapContainer,
       style: styleURL || 'mapbox://styles/mapbox/streets-v11',
+      maxPitch: 60,
     });
 
     /* eslint-disable dot-notation */
