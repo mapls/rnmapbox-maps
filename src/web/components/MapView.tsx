@@ -15,12 +15,12 @@ class MapView extends React.Component<
     onCameraChanged: (e: RNMapView.MapState) => void;
     onMapIdle: (e: RNMapView.MapState) => void;
   } & {
-    map?: object | null;
+    map?: mapboxgl.Map | null;
   }
 > {
   state = { map: null };
   mapContainer: HTMLElement | null = null;
-  map: object | null = null;
+  map: mapboxgl.Map | null = null;
 
   componentDidMount() {
     const { styleURL } = this.props;
@@ -99,6 +99,10 @@ class MapView extends React.Component<
     if (onMapIdle) {
       onMapIdle(e);
     }
+  }
+
+  getZoom(): number | undefined {
+    return this.map?.getZoom();
   }
 
   render() {
