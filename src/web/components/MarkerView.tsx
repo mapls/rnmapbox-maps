@@ -11,12 +11,14 @@ import {
   useMemo,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { ViewStyle } from 'react-native';
 
 import MapContext from '../MapContext';
 
 type MarkerViewProps = {
   coordinate: [number, number];
   children?: ReactElement;
+  style?: ViewStyle;
 };
 
 function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
@@ -38,7 +40,9 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
     style.position = 'absolute';
     style.top = '0';
     style.left = '0';
-
+    if (props.style?.zIndex != null) {
+      style.zIndex = props.style.zIndex.toString();
+    }
     return _marker;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
