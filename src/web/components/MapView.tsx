@@ -1,6 +1,7 @@
 import React from 'react';
-import mapboxgl, { type MapMouseEvent } from 'mapbox-gl';
+import mapboxgl, { type MapMouseEvent, type LngLatLike } from 'mapbox-gl';
 
+import type { Position } from '../../types/Position';
 import MapContext from '../MapContext';
 import * as RNMapView from '../../components/MapView';
 
@@ -103,6 +104,17 @@ class MapView extends React.Component<
 
   getZoom(): number | undefined {
     return this.map?.getZoom();
+  }
+
+  getPointInView(coordinate: Position): Promise<Position> {
+    return new Promise((resolve) => {
+      if (!this.map) {
+        resolve([0, 0]);
+        return;
+      }
+      const point = this.map.project(coordinate as LngLatLike);
+      resolve([point.x, point.y]);
+    });
   }
 
   render() {
