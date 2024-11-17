@@ -1,7 +1,7 @@
 {
   "name": "@rnmapbox/maps",
   "description": "A Mapbox react native module for creating custom maps",
-  "version": "10.1.33-mapls.0",
+  "version": "10.1.38-mapls.1",
   "publishConfig": {
     "registry": "https://registry.mapls.ee",
     "access": "public"
