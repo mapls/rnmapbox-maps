@@ -33,6 +33,7 @@ class MapView extends React.Component<
       container: this.mapContainer,
       style: styleURL || 'mapbox://styles/mapbox/streets-v11',
       maxPitch: 60,
+      doubleClickZoom: false,
     });
 
     /* eslint-disable dot-notation */
