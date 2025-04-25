@@ -17,8 +17,75 @@ import MapContext from '../MapContext';
 
 type MarkerViewProps = {
   coordinate: [number, number];
+  anchor?: { x: number; y: number };
   children?: ReactElement;
   style?: ViewStyle;
+};
+
+const xyToAnchorPoint = ({ x, y }: { x: number, y: number }) => {
+  if (x < 0 || x > 1 || y < 0 || y > 1) {
+    throw new Error('Invalid anchor point');
+  }
+
+  // Center
+  if (x >= 0.4 && x <= 0.6 && y >= 0.4 && y <= 0.6) {
+    return 'center';
+  }
+
+  // Top
+  if (x >= 0.4 && x <= 0.6 && y <= 0.1) {
+    return 'top';
+  }
+
+  // Bottom
+  if (x >= 0.4 && x <= 0.6 && y >= 0.9) {
+    return 'bottom';
+  }
+
+  // Left
+  if (x <= 0.1 && y >= 0.4 && y <= 0.6) {
+    return 'left';
+  }
+
+  // Right
+  if (x >= 0.9 && y >= 0.4 && y <= 0.6) {
+    return 'right';
+  }
+
+  // Top-left
+  if (x <= 0.1 && y <= 0.1) {
+    return 'top-left';
+  }
+
+  // Top-right
+  if (x >= 0.9 && y <= 0.1) {
+    return 'top-right';
+  }
+
+  // Bottom-left
+  if (x <= 0.1 && y >= 0.9) {
+    return 'bottom-left';
+  }
+
+  // Bottom-right
+  if (x >= 0.9 && y >= 0.9) {
+    return 'bottom-right';
+  }
+
+  // Default to the closest anchor point
+  if (x < 0.5) {
+    if (y < 0.5) {
+      return 'top-left';
+    } else {
+      return 'bottom-left';
+    }
+  } else {
+    if (y < 0.5) {
+      return 'top-right';
+    } else {
+      return 'bottom-right';
+    }
+  }
 };
 
 function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
@@ -27,6 +94,7 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
   // Create marker instance
   const marker: Marker = useMemo(() => {
     const _marker = new Marker({
+      anchor: props?.anchor?.x && props?.anchor?.y ? xyToAnchorPoint(props.anchor) : 'center',
       element: isValidElement(props.children)
         ? document.createElement('div')
         : undefined,
