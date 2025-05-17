@@ -8,6 +8,9 @@ import * as RNMapView from '../../components/MapView';
 /**
  * MapView backed by Mapbox GL KS
  */
+
+type styleURLProps = { styleURL: string };
+
 class MapView extends React.Component<
   RNMapView.default & {
     styleURL: string;
@@ -15,6 +18,7 @@ class MapView extends React.Component<
     onPress: (e: GeoJSON.Feature) => void;
     onCameraChanged: (e: RNMapView.MapState) => void;
     onMapIdle: (e: RNMapView.MapState) => void;
+    _setStyleURL: (props: styleURLProps) => void;
   } & {
     map?: mapboxgl.Map | null;
   }
@@ -80,6 +84,12 @@ class MapView extends React.Component<
     this.map = map;
     this.setState({ map });
   }
+
+  _setStyleURL = (props: styleURLProps) => {
+    if (this.map && props.styleURL && this.map.isStyleLoaded()) {
+      this.map.setStyle(props.styleURL);
+    }
+  };
 
   handleMapPress(e: GeoJSON.Feature<GeoJSON.Point>) {
     const { onPress } = this.props;
