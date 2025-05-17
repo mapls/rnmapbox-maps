@@ -8,7 +8,6 @@ import * as RNMapView from '../../components/MapView';
 /**
  * MapView backed by Mapbox GL KS
  */
-
 type styleURLProps = { styleURL: string };
 
 class MapView extends React.Component<
@@ -19,11 +18,12 @@ class MapView extends React.Component<
     onCameraChanged: (e: RNMapView.MapState) => void;
     onMapIdle: (e: RNMapView.MapState) => void;
     _setStyleURL: (props: styleURLProps) => void;
+    setMonochrome: (enabled: boolean) => void;
   } & {
     map?: mapboxgl.Map | null;
   }
 > {
-  state = { map: null };
+  state = { map: null, isMonochrome: false };
   mapContainer: HTMLElement | null = null;
   map: mapboxgl.Map | null = null;
 
@@ -33,6 +33,7 @@ class MapView extends React.Component<
       console.error('MapView - mapContainer should is null');
       return;
     }
+
     const map = new mapboxgl.Map({
       container: this.mapContainer,
       style: styleURL || 'mapbox://styles/mapbox/streets-v11',
@@ -90,6 +91,25 @@ class MapView extends React.Component<
       this.map.setStyle(props.styleURL);
     }
   };
+
+  setMonochrome = (enabled: boolean) => {
+    if (!this.map || !this.mapContainer) return;
+
+    this.setState({ isMonochrome: enabled });
+    this.applyMonochromeFilter(enabled);
+  };
+
+  applyMonochromeFilter(enable: boolean) {
+    const mapCanvas = this.mapContainer?.querySelector('.mapboxgl-canvas');
+    if (!mapCanvas || !(mapCanvas instanceof HTMLElement)) return;
+
+    if (enable) {
+      mapCanvas.style.filter = 'grayscale(1) brightness(1.1) contrast(0.9)';
+      mapCanvas.style.transition = 'filter 0.2s ease';
+    } else {
+      mapCanvas.style.filter = 'none';
+    }
+  }
 
   handleMapPress(e: GeoJSON.Feature<GeoJSON.Point>) {
     const { onPress } = this.props;
