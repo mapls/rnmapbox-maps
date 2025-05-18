@@ -23,6 +23,8 @@ class MapView extends React.Component<
     onPress: (e: GeoJSON.Feature) => void;
     onCameraChanged: (e: RNMapView.MapState) => void;
     onMapIdle: (e: RNMapView.MapState) => void;
+    onWillStartLoadingMap?: () => void;
+    onDidFinishLoadingMap?: () => void;
     _setStyleURL: (props: styleURLProps) => void;
     setMonochrome: (enabled: boolean) => void;
   } & {
@@ -88,6 +90,19 @@ class MapView extends React.Component<
 
     map.on('move', () => this.handleCameraChanged(currentMapState()));
     map.on('idle', () => this.handleMapOnIdle(currentMapState()));
+    map.on('styledata', () => {
+      const { onWillStartLoadingMap } = this.props;
+      if (onWillStartLoadingMap) {
+        onWillStartLoadingMap();
+      }
+    });
+
+    map.on('load', () => {
+      const { onDidFinishLoadingMap } = this.props;
+      if (onDidFinishLoadingMap) {
+        onDidFinishLoadingMap();
+      }
+    });
 
     this.map = map;
     this.setState({ map });
