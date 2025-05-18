@@ -99,23 +99,49 @@ class MapView extends React.Component<
     }
   };
 
-  colorLand = (color: string) => {
+  colorLand = (baseColor: string) => {
     if (!this.map) return;
 
-    const landLayerIds = [
-      'land',
-      'landcover',
-      'national-park',
-      'landuse',
-      'hillshade',
-      'land-structure-polygon',
-      'land-structure-line'
-    ];
+    const hexToRgb = (hex: string) => {
+      hex = hex.replace(/^#/, '');
+
+      const bigint = parseInt(hex, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+
+      return { r, g, b };
+    };
+
+    const adjustBrightness = (hex: string, factor: number) => {
+      const { r, g, b } = hexToRgb(hex);
+
+      const adjustR = Math.min(255, Math.max(0, Math.round(r * factor)));
+      const adjustG = Math.min(255, Math.max(0, Math.round(g * factor)));
+      const adjustB = Math.min(255, Math.max(0, Math.round(b * factor)));
+
+      return `#${adjustR.toString(16).padStart(2, '0')}${adjustG.toString(16).padStart(2, '0')}${adjustB.toString(16).padStart(2, '0')}`;
+    };
+
+    const layerConfig = {
+      'land': { factor: 1.0 },                   // Base land
+      'landcover': { factor: 0.95 },             // Slightly darker
+      'national-park': { factor: 0.9 },          // Darker for parks
+      'landuse': { factor: 1.05 },               // Slightly lighter
+      'hillshade': { factor: 0.85 },             // Darker for hills
+      'land-structure-polygon': { factor: 1.1 }, // Lighter for structures
+      'land-structure-line': { factor: 0.75 }    // Darker for lines
+    };
+
+    const landLayerIds = Object.keys(layerConfig);
 
     landLayerIds.forEach(layerId => {
       if (!this.map) return;
       const layer = this.map.getStyle().layers.find(l => l.id === layerId);
       if (!layer) return;
+
+      const { factor } = layerConfig[layerId as keyof typeof layerConfig];
+      const shadeColor = adjustBrightness(baseColor, factor);
 
       if (layer.type === 'background') {
         const originalValue = this.map.getPaintProperty(layerId, 'background-color');
@@ -124,7 +150,7 @@ class MapView extends React.Component<
           property: 'background-color',
           originalValue
         });
-        this.map.setPaintProperty(layerId, 'background-color', color);
+        this.map.setPaintProperty(layerId, 'background-color', shadeColor);
       }
       else if (layer.type === 'fill') {
         const originalValue = this.map.getPaintProperty(layerId, 'fill-color');
@@ -133,7 +159,7 @@ class MapView extends React.Component<
           property: 'fill-color',
           originalValue
         });
-        this.map.setPaintProperty(layerId, 'fill-color', color);
+        this.map.setPaintProperty(layerId, 'fill-color', shadeColor);
 
         const outlineColor = this.map?.getPaintProperty(layerId, 'fill-outline-color');
         if (outlineColor) {
@@ -142,7 +168,7 @@ class MapView extends React.Component<
             property: 'fill-outline-color',
             originalValue: outlineColor
           });
-          this.map.setPaintProperty(layerId, 'fill-outline-color', color);
+          this.map.setPaintProperty(layerId, 'fill-outline-color', adjustBrightness(shadeColor, 0.8));
         }
       }
       else if (layer.type === 'line') {
@@ -152,7 +178,7 @@ class MapView extends React.Component<
           property: 'line-color',
           originalValue: originalColor
         });
-        this.map.setPaintProperty(layerId, 'line-color', color);
+        this.map.setPaintProperty(layerId, 'line-color', shadeColor);
       }
     });
   }
