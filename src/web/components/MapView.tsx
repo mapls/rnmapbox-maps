@@ -19,7 +19,7 @@ interface LayerColorState {
 class MapView extends React.Component<
   RNMapView.default & {
     styleURL: string;
-    children: JSX.Element;
+    children: React.JSX.Element;
     onPress: (e: GeoJSON.Feature) => void;
     onCameraChanged: (e: RNMapView.MapState) => void;
     onMapIdle: (e: RNMapView.MapState) => void;
@@ -35,6 +35,7 @@ class MapView extends React.Component<
   mapContainer: HTMLElement | null = null;
   map: mapboxgl.Map | null = null;
   originalLandColors: LayerColorState[] = [];
+  colorOperationInProgress = false;
 
   componentDidMount() {
     const { styleURL } = this.props;
@@ -50,7 +51,6 @@ class MapView extends React.Component<
     });
 
     /* eslint-disable dot-notation */
-    // @ts-expect-error - Do not modify
     map.touchZoomRotate['_tapDragZoom']['_enabled'] = false;
 
     map.on('mousedown', (e: MapMouseEvent) => {
@@ -117,38 +117,42 @@ class MapView extends React.Component<
   colorLand = (baseColor: string) => {
     if (!this.map) return;
 
+    if (this.colorOperationInProgress) {
+      return;
+    }
+
+    this.colorOperationInProgress = true;
+
     const hexToRgb = (hex: string) => {
       hex = hex.replace(/^#/, '');
-
       const bigint = parseInt(hex, 16);
       const r = (bigint >> 16) & 255;
       const g = (bigint >> 8) & 255;
       const b = bigint & 255;
-
       return { r, g, b };
     };
 
     const adjustBrightness = (hex: string, factor: number) => {
       const { r, g, b } = hexToRgb(hex);
-
       const adjustR = Math.min(255, Math.max(0, Math.round(r * factor)));
       const adjustG = Math.min(255, Math.max(0, Math.round(g * factor)));
       const adjustB = Math.min(255, Math.max(0, Math.round(b * factor)));
-
       return `#${adjustR.toString(16).padStart(2, '0')}${adjustG.toString(16).padStart(2, '0')}${adjustB.toString(16).padStart(2, '0')}`;
     };
 
     const layerConfig = {
-      'land': { factor: 1.0 },                   // Base land
-      'landcover': { factor: 0.95 },             // Slightly darker
-      'national-park': { factor: 0.9 },          // Darker for parks
-      'landuse': { factor: 1.05 },               // Slightly lighter
-      'hillshade': { factor: 0.85 },             // Darker for hills
-      'land-structure-polygon': { factor: 1.1 }, // Lighter for structures
-      'land-structure-line': { factor: 0.75 }    // Darker for lines
+      'land': { factor: 1.0 },
+      'landcover': { factor: 0.95 },
+      'national-park': { factor: 0.9 },
+      'landuse': { factor: 1.05 },
+      'hillshade': { factor: 0.85 },
+      'land-structure-polygon': { factor: 1.1 },
+      'land-structure-line': { factor: 0.75 }
     };
 
     const landLayerIds = Object.keys(layerConfig);
+
+    const captureOriginalColors = this.originalLandColors.length === 0;
 
     landLayerIds.forEach(layerId => {
       if (!this.map) return;
@@ -159,43 +163,53 @@ class MapView extends React.Component<
       const shadeColor = adjustBrightness(baseColor, factor);
 
       if (layer.type === 'background') {
-        const originalValue = this.map.getPaintProperty(layerId, 'background-color');
-        this.originalLandColors.push({
-          layerId,
-          property: 'background-color',
-          originalValue
-        });
+        if (captureOriginalColors) {
+          const originalValue = this.map.getPaintProperty(layerId, 'background-color');
+          this.originalLandColors.push({
+            layerId,
+            property: 'background-color',
+            originalValue
+          });
+        }
         this.map.setPaintProperty(layerId, 'background-color', shadeColor);
       }
       else if (layer.type === 'fill') {
-        const originalValue = this.map.getPaintProperty(layerId, 'fill-color');
-        this.originalLandColors.push({
-          layerId,
-          property: 'fill-color',
-          originalValue
-        });
+        if (captureOriginalColors) {
+          const originalValue = this.map.getPaintProperty(layerId, 'fill-color');
+          this.originalLandColors.push({
+            layerId,
+            property: 'fill-color',
+            originalValue
+          });
+        }
         this.map.setPaintProperty(layerId, 'fill-color', shadeColor);
 
         const outlineColor = this.map?.getPaintProperty(layerId, 'fill-outline-color');
         if (outlineColor) {
-          this.originalLandColors.push({
-            layerId,
-            property: 'fill-outline-color',
-            originalValue: outlineColor
-          });
+          if (captureOriginalColors) {
+            this.originalLandColors.push({
+              layerId,
+              property: 'fill-outline-color',
+              originalValue: outlineColor
+            });
+          }
           this.map.setPaintProperty(layerId, 'fill-outline-color', adjustBrightness(shadeColor, 0.8));
         }
       }
       else if (layer.type === 'line') {
-        const originalColor = this.map?.getPaintProperty(layerId, 'line-color');
-        this.originalLandColors.push({
-          layerId,
-          property: 'line-color',
-          originalValue: originalColor
-        });
+        if (captureOriginalColors) {
+          const originalColor = this.map?.getPaintProperty(layerId, 'line-color');
+          this.originalLandColors.push({
+            layerId,
+            property: 'line-color',
+            originalValue: originalColor
+          });
+        }
         this.map.setPaintProperty(layerId, 'line-color', shadeColor);
       }
     });
+
+    this.colorOperationInProgress = false;
   }
 
   resetLandColors = () => {
@@ -206,12 +220,14 @@ class MapView extends React.Component<
         (this.map as any).setPaintProperty(item.layerId, item.property, item.originalValue);
       }
     });
-
-    this.originalLandColors = [];
   }
 
   setLandColor = (color: string) => {
     if (!this.map || !this.mapContainer) return;
+
+    if (this.originalLandColors.length > 0) {
+      this.resetLandColors();
+    }
 
     if (!this.map.isStyleLoaded()) {
       const styleLoadListener = () => {
@@ -227,8 +243,9 @@ class MapView extends React.Component<
 
   resetLandColor = () => {
     if (!this.map || !this.mapContainer || this.originalLandColors.length === 0) return;
-
     this.resetLandColors();
+
+    this.originalLandColors = [];
   };
 
   setMonochrome = (enabled: boolean) => {
@@ -309,3 +326,4 @@ class MapView extends React.Component<
 }
 
 export default MapView;
+
