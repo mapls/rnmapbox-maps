@@ -83,6 +83,7 @@ interface Props {
    * Specifies the external images in key-value pairs required for the shape source.
    * Keys are names - see iconImage expressions, values can be either urls-s objects
    * with format `{uri: 'http://...'}` or `require('image.png')` or `import 'image.png'`
+   * Animated GIFs are supported and will be automatically detected and animated.
    */
   images?: { [key: string]: ImageEntry };
 
