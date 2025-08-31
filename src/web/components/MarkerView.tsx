@@ -20,6 +20,7 @@ type MarkerViewProps = {
   anchor?: { x: number; y: number };
   children?: ReactElement;
   style?: ViewStyle;
+  className?: string;
 };
 
 const xyToAnchorPoint = ({ x, y }: { x: number, y: number }) => {
@@ -102,6 +103,8 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
 
     // Set marker coordinates
     _marker.setLngLat(props.coordinate);
+
+    if (props.className) _marker.addClassName(props.className);
 
     // Fix marker position
     const { style } = _marker.getElement();
