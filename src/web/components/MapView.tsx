@@ -27,6 +27,7 @@ class MapView extends React.Component<
     onDidFinishLoadingMap?: () => void;
     _setStyleURL: (props: styleURLProps) => void;
     setMonochrome: (enabled: boolean) => void;
+    reloadOnContextLost?: boolean;
   } & {
     map?: mapboxgl.Map | null;
   }
@@ -52,6 +53,13 @@ class MapView extends React.Component<
 
     /* eslint-disable dot-notation */
     map.touchZoomRotate['_tapDragZoom']['_enabled'] = false;
+
+    if (this.props.reloadOnContextLost) {
+      map.on('webglcontextlost', () => {
+        console.log('Map webglcontextlost event triggered.');
+        window.location.reload();
+      });
+    }
 
     map.on('mousedown', (e: MapMouseEvent) => {
       // @ts-expect-error - classList is actually present, TypeScript lies.
