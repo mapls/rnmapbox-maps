@@ -32,11 +32,16 @@ class MapView extends React.Component<
     map?: mapboxgl.Map | null;
   }
 > {
-  state = { map: null, isMonochrome: false };
+  state = { map: null };
   mapContainer: HTMLElement | null = null;
   map: mapboxgl.Map | null = null;
   originalLandColors: LayerColorState[] = [];
   colorOperationInProgress = false;
+  // rAF throttling for camera updates
+  _rafId: number | null = null;
+  _pendingCameraState: RNMapView.MapState | null = null;
+  // Stable context value to avoid re-rendering children unnecessarily
+  _contextValue: { map?: mapboxgl.Map } = {};
 
   componentDidMount() {
     const { styleURL } = this.props;
@@ -49,6 +54,7 @@ class MapView extends React.Component<
       container: this.mapContainer,
       style: styleURL || 'mapbox://styles/mapbox/streets-v12',
       maxPitch: 60,
+      antialias: false,
     });
 
     /* eslint-disable dot-notation */
@@ -86,19 +92,36 @@ class MapView extends React.Component<
           zoom: map.getZoom(),
           pitch: map.getPitch(),
           heading: map.getBearing(),
-          bounds: {
-            ne: map.getBounds()?.getNorthEast().toArray() ?? [0, 0],
-            sw: map.getBounds()?.getSouthWest().toArray() ?? [0, 0],
-          },
+          bounds: (() => {
+            const b = map.getBounds();
+            const ne = b?.getNorthEast().toArray() ?? [0, 0];
+            const sw = b?.getSouthWest().toArray() ?? [0, 0];
+            return { ne, sw };
+          })(),
         },
       };
 
       return state;
     };
 
-    map.on('move', () => this.handleCameraChanged(currentMapState()));
+    // Throttle camera updates to animation frames
+    const onMove = () => {
+      this._pendingCameraState = currentMapState();
+      if (this._rafId == null) {
+        this._rafId = window.requestAnimationFrame(() => {
+          this._rafId = null;
+          if (this._pendingCameraState) {
+            this.handleCameraChanged(this._pendingCameraState);
+            this._pendingCameraState = null;
+          }
+        });
+      }
+    };
+
+    map.on('move', onMove);
     map.on('idle', () => this.handleMapOnIdle(currentMapState()));
-    map.on('styledata', () => {
+    // Use styledataloading to avoid repeated styledata storms
+    map.on('styledataloading', () => {
       const { onWillStartLoadingMap } = this.props;
       if (onWillStartLoadingMap) {
         onWillStartLoadingMap();
@@ -113,7 +136,23 @@ class MapView extends React.Component<
     });
 
     this.map = map;
+    this._contextValue = { map };
     this.setState({ map });
+  }
+
+  componentWillUnmount() {
+    if (this._rafId != null) {
+      try {
+        cancelAnimationFrame(this._rafId);
+      } catch {}
+      this._rafId = null;
+    }
+    if (this.map) {
+      try {
+        this.map.remove();
+      } catch {}
+      this.map = null;
+    }
   }
 
   _setStyleURL = (props: styleURLProps) => {
@@ -258,8 +297,6 @@ class MapView extends React.Component<
 
   setMonochrome = (enabled: boolean) => {
     if (!this.map || !this.mapContainer) return;
-
-    this.setState({ isMonochrome: enabled });
     this.applyMonochromeFilter(enabled);
   };
 
@@ -323,7 +360,7 @@ class MapView extends React.Component<
       >
         {map && (
           <div style={{ position: 'absolute' }}>
-            <MapContext.Provider value={{ map }}>
+            <MapContext.Provider value={this._contextValue}>
               {children}
             </MapContext.Provider>
           </div>
@@ -334,4 +371,3 @@ class MapView extends React.Component<
 }
 
 export default MapView;
-

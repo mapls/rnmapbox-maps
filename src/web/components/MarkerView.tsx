@@ -9,6 +9,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { ViewStyle } from 'react-native';
@@ -111,6 +112,7 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
     style.position = 'absolute';
     style.top = '0';
     style.left = '0';
+    style.willChange = 'transform';
     if (props.style?.zIndex != null) {
       style.zIndex = props.style.zIndex.toString();
     }
@@ -136,17 +138,82 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useImperativeHandle(ref, () => marker, []);
 
-  // Update marker coordinates
-  const markerCoordinate = marker.getLngLat();
-  if (
-    markerCoordinate.lng !== props.coordinate[0] ||
-    markerCoordinate.lat !== props.coordinate[1]
-  ) {
-    marker.setLngLat([props.coordinate[0], props.coordinate[1]]);
-  }
+  // Update marker coordinates only when values change
+  const lng = props.coordinate[0];
+  const lat = props.coordinate[1];
+  const coordRef = useRef<{ lng: number; lat: number }>({ lng, lat });
+  const rafRef = useRef<number | null>(null);
+  useEffect(() => {
+    coordRef.current = { lng, lat };
+    if (rafRef.current == null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        const { lng: L, lat: A } = coordRef.current;
+        const c = marker.getLngLat();
+        if (c.lng !== L || c.lat !== A) {
+          marker.setLngLat([L, A]);
+        }
+      });
+    }
+  }, [marker, lng, lat]);
+  useEffect(() => () => {
+    if (rafRef.current != null) {
+      try { cancelAnimationFrame(rafRef.current); } catch {}
+      rafRef.current = null;
+    }
+  }, []);
 
-  // Inject children into marker element
-  return createPortal(props.children, marker.getElement());
+  // Update className dynamically without recreating marker
+  const prevClassRef = useRef<string | undefined>(props.className);
+  useEffect(() => {
+    const prev = prevClassRef.current;
+    if (prev && prev !== props.className) {
+      try { marker.removeClassName(prev); } catch {}
+    }
+    if (props.className && props.className !== prev) {
+      try { marker.addClassName(props.className); } catch {}
+    }
+    prevClassRef.current = props.className;
+  }, [marker, props.className]);
+
+  // Update zIndex dynamically
+  const z = props.style?.zIndex;
+  const prevZRef = useRef<number | undefined>(z);
+  useEffect(() => {
+    if (prevZRef.current !== z && z != null) {
+      marker.getElement().style.zIndex = z.toString();
+      prevZRef.current = z;
+    }
+  }, [marker, z]);
+
+  // Inject children into marker element only if present
+  return props.children ? createPortal(props.children, marker.getElement()) : null;
 }
 
-export default memo(forwardRef(MarkerView));
+function propsAreEqual(prev: MarkerViewProps, next: MarkerViewProps) {
+  // Compare coordinates by value to avoid unnecessary renders
+  if (prev.coordinate[0] !== next.coordinate[0] || prev.coordinate[1] !== next.coordinate[1]) {
+    return false;
+  }
+  // Compare anchor values if provided
+  const pa = prev.anchor;
+  const na = next.anchor;
+  if ((pa?.x ?? -1) !== (na?.x ?? -1) || (pa?.y ?? -1) !== (na?.y ?? -1)) {
+    return false;
+  }
+  // ClassName change should re-render (for children portal and effects)
+  if (prev.className !== next.className) {
+    return false;
+  }
+  // zIndex change should re-render to allow effect to run
+  if ((prev.style?.zIndex ?? undefined) !== (next.style?.zIndex ?? undefined)) {
+    return false;
+  }
+  // Children identity change should re-render
+  if (prev.children !== next.children) {
+    return false;
+  }
+  return true;
+}
+
+export default memo(forwardRef(MarkerView), propsAreEqual);
