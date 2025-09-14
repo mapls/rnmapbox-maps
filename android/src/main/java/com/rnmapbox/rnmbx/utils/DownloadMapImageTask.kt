@@ -251,37 +251,101 @@ class DownloadMapImageTask(
         reusableBitmap.density = DisplayMetrics.DENSITY_DEFAULT
         val canvas = android.graphics.Canvas(reusableBitmap)
 
-        val animationRunnable =
-            object : Runnable {
-                override fun run() {
+        // Hook into the drawable's scheduling to respect per-frame timing
+        // Keep a strong reference to the drawable to prevent GC stopping the animation
+        mImageManager.get()?.registerAnimatedGif(key, gifDrawable)
+
+        val cb =
+            object : android.graphics.drawable.Drawable.Callback {
+                override fun invalidateDrawable(who: android.graphics.drawable.Drawable) {
                     try {
+                        // If this GIF is no longer registered, detach and stop
+                        if (mImageManager.get()?.isGifRegistered(key, gifDrawable) != true) {
+                            gifDrawable.stop()
+                            gifDrawable.callback = null
+                            return
+                        }
                         val mapInstance = mapRef.get()
+                        val style = mapInstance?.getStyle()
                         if (mapInstance == null) {
+                            // Map is gone; stop animation and detach callback
+                            gifDrawable.stop()
+                            gifDrawable.callback = null
+                            mImageManager.get()?.unregisterAnimatedGif(key)
                             return
                         }
 
-                        // Clear and redraw on the reusable bitmap
-                        canvas.drawColor(android.graphics.Color.TRANSPARENT, android.graphics.PorterDuff.Mode.CLEAR)
+                        // Redraw current frame onto reusable bitmap
+                        canvas.drawColor(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.PorterDuff.Mode.CLEAR,
+                        )
                         gifDrawable.setBounds(0, 0, canvas.width, canvas.height)
                         gifDrawable.draw(canvas)
 
-                        // Update the map image
-                        mapInstance.getStyle()?.addBitmapImage(key, reusableBitmap, imageInfo)
-
-                        // Use a reasonable frame rate for GIF animation
-                        val frameDelay = 100L // 100ms = 10fps, good balance of smoothness and performance
-                        handler.postDelayed(this, frameDelay)
-                    } catch (e: Exception) {
-                        // Stop animation on error
+                        // Update map image with current frame if style is ready
+                        style?.addBitmapImage(key, reusableBitmap, imageInfo)
+                    } catch (_: Exception) {
+                        // Ignore frame-level errors to avoid crashing animation
                     }
+                }
+
+                override fun scheduleDrawable(
+                    who: android.graphics.drawable.Drawable,
+                    what: Runnable,
+                    `when`: Long,
+                ) {
+                    // Only schedule if still registered
+                    if (mImageManager.get()?.isGifRegistered(key, gifDrawable) == true) {
+                        // Use exact timestamp scheduling to match GIF's native frame cadence
+                        handler.postAtTime(what, `when`)
+                    }
+                }
+
+                override fun unscheduleDrawable(
+                    who: android.graphics.drawable.Drawable,
+                    what: Runnable,
+                ) {
+                    handler.removeCallbacks(what)
                 }
             }
 
-        // Start the GIF drawable
+        gifDrawable.callback = cb
+
+        // Ensure the GIF loops forever (0 = infinite in android-gif-drawable)
+        try {
+            gifDrawable.setLoopCount(0)
+        } catch (_: Throwable) {
+            // Older/changed API – ignore; will use GIF's intrinsic loop settings
+        }
+
+        // Start the GIF; frames will drive invalidations via the callback above
         gifDrawable.start()
 
-        // Start the animation updates
-        handler.post(animationRunnable)
+        // Keepalive: if something stops the drawable (e.g., transient system events), restart it
+        val keepAlive = object : Runnable {
+            override fun run() {
+                val mapInstance = mapRef.get()
+                if (mapInstance == null) {
+                    // Map is gone; stop keepalive
+                    return
+                }
+                // If unregistered, stop keepalive loop
+                if (mImageManager.get()?.isGifRegistered(key, gifDrawable) != true) {
+                    return
+                }
+                try {
+                    if (gifDrawable.callback == null) {
+                        gifDrawable.callback = cb
+                    }
+                    if (!gifDrawable.isRunning) {
+                        gifDrawable.start()
+                    }
+                } catch (_: Throwable) { }
+                handler.postDelayed(this, 1000L)
+            }
+        }
+        handler.postDelayed(keepAlive, 1000L)
     }
 
     companion object {

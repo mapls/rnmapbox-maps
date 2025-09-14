@@ -120,6 +120,8 @@ class RNMBXImages(context: Context, private val mManager: RNMBXImagesManager) : 
             override fun onStyleLoaded(style: Style) {
                 if (hasImages()) {
                     for ((key) in mImages!!) {
+                        // Unregister animated GIFs tied to this image key
+                        mapView.imageManager.unregisterAnimatedGif(key)
                         style.removeStyleImage(key)
                     }
                 }
