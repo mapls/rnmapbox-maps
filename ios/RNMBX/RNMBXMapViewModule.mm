@@ -8,6 +8,7 @@
 #endif // RCT_NEW_ARCH_ENABLED
 
 #import "rnmapbox_maps-Swift.pre.h"
+#import "RNMBXViewResolver.h"
 
 @implementation RNMBXMapViewModule
 
@@ -27,25 +28,15 @@ RCT_EXPORT_MODULE();
 
 - (void)withMapView:(nonnull NSNumber*)viewRef block:(void (^)(RNMBXMapView *))block reject:(RCTPromiseRejectBlock)reject methodName:(NSString *)methodName
 {
-//    void (^upperBlock)(void) = ^{
-#ifdef RCT_NEW_ARCH_ENABLED
-    [self.viewRegistry_DEPRECATED addUIBlock:^(RCTViewRegistry *viewRegistry) {
-        RNMBXMapViewComponentView *componentView = [self.viewRegistry_DEPRECATED viewForReactTag:viewRef];
-        RNMBXMapView *view = componentView.contentView;
-        
-#else
-    [self.bridge.uiManager
-     addUIBlock:^(RCTUIManager *uiManager, NSDictionary<NSNumber *, UIView *> *viewRegistry) {
-        RNMBXMapView *view = [uiManager viewForReactTag:viewRef];
-#endif // RCT_NEW_ARCH_ENABLED
-        if (view != nil) {
-           block(view);
-        } else {
-            reject(methodName, [NSString stringWithFormat:@"Unknown reactTag: %@", viewRef], nil);
-        }
-    }];
+    [RNMBXViewResolver withViewRef:viewRef
+                    delegate:self
+                    expectedClass:[RNMBXMapView class]
+                    block:^(UIView *view) {
+                        block((RNMBXMapView *)view);
+                    }
+                    reject:reject
+                    methodName:methodName];
 }
-
 
 RCT_EXPORT_METHOD(takeSnap:(nonnull NSNumber*)viewRef writeToDisk:(BOOL)writeToDisk resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
 {
@@ -72,7 +63,7 @@ RCT_EXPORT_METHOD(getCoordinateFromView:(nonnull NSNumber*)viewRef atPoint:(NSAr
     [self withMapView:viewRef block:^(RNMBXMapView *view) {
         NSNumber* a = [atPoint objectAtIndex:0];
         NSNumber* b = [atPoint objectAtIndex:1];
-        
+
         [RNMBXMapViewManager getCoordinateFromView:view atPoint:CGPointMake(a.floatValue, b.floatValue) resolver:resolve rejecter:reject];
     } reject:reject methodName:@"getCoordinateFromView"];
 }
@@ -131,6 +122,24 @@ RCT_EXPORT_METHOD(setSourceVisibility:(nonnull NSNumber*)viewRef visible:(BOOL)v
     [self withMapView:viewRef block:^(RNMBXMapView *view) {
         [RNMBXMapViewManager setSourceVisibility:view visible:visible sourceId:sourceId sourceLayerId:sourceLayerId resolver:resolve rejecter:reject];
     } reject:reject methodName:@"setSourceVisibility"];
+}
+
+RCT_EXPORT_METHOD(setFeatureState:(nonnull NSNumber*)viewRef featureId:(nonnull NSString *)featureId state:(nonnull NSDictionary<NSString*,id> *)state sourceId:(NSString *)sourceId sourceLayerId:(NSString *)sourceLayerId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject) {
+    [self withMapView:viewRef block:^(RNMBXMapView *view) {
+        [RNMBXMapViewManager setFeatureState:view featureId:featureId state:state sourceId:sourceId sourceLayerId:sourceLayerId resolver:resolve rejecter:reject];
+    } reject:reject methodName:@"setFeatureState"];
+}
+
+RCT_EXPORT_METHOD(getFeatureState:(nonnull NSNumber*)viewRef featureId:(nonnull NSString *)featureId sourceId:(nonnull NSString *)sourceId sourceLayerId:(NSString *)sourceLayerId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject) {
+    [self withMapView:viewRef block:^(RNMBXMapView *view) {
+        [RNMBXMapViewManager getFeatureState:view featureId:featureId sourceId:sourceId sourceLayerId:sourceLayerId resolver:resolve rejecter:reject];
+    } reject:reject methodName:@"getFeatureState"];
+}
+
+RCT_EXPORT_METHOD(removeFeatureState:(nonnull NSNumber*)viewRef featureId:(nonnull NSString *)featureId stateKey:(NSString*)stateKey sourceId:(NSString *)sourceId sourceLayerId:(NSString *)sourceLayerId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject) {
+    [self withMapView:viewRef block:^(RNMBXMapView *view) {
+        [RNMBXMapViewManager removeFeatureState:view featureId:featureId stateKey:stateKey sourceId:sourceId sourceLayerId:sourceLayerId resolver:resolve rejecter:reject];
+    } reject:reject methodName:@"removeFeatureState"];
 }
 
 RCT_EXPORT_METHOD(querySourceFeatures:(nonnull NSNumber*)viewRef sourceId:(NSString*)sourceId withFilter:(NSArray<id>*)withFilter withSourceLayerIDs:(NSArray<NSString*>*)withSourceLayerIDs resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject) {

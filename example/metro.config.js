@@ -1,8 +1,8 @@
 // https://github.com/callstack/react-native-builder-bob/blob/main/packages/create-react-native-library/templates/expo-library/example/metro.config.js
 const path = require('path');
 
-const { getDefaultConfig } = require('expo/metro-config');
-const exclusionList = require('metro-config/src/defaults/exclusionList');
+const { getDefaultConfig } = require('@expo/metro-config');
+const exclusionList = require('metro-config/private/defaults/exclusionList');
 const escape = require('escape-string-regexp');
 
 const root = path.resolve(__dirname, '..');

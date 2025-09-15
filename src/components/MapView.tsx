@@ -9,7 +9,7 @@ import {
   HostComponent,
   LayoutChangeEvent,
 } from 'react-native';
-import { debounce } from 'debounce';
+import debounce from 'debounce';
 
 import NativeMapView, {
   type NativeMapViewActual,
@@ -445,24 +445,27 @@ type Props = ViewProps & {
   _nativeImpl?: NativeMapViewActual;
 };
 
-type CallbablePropKeys =
-  | 'onRegionWillChange'
-  | 'onRegionIsChanging'
-  | 'onRegionDidChange'
-  | 'onUserLocationUpdate'
-  | 'onWillStartLoadingMap'
-  | 'onMapLoadingError'
-  | 'onDidFinishLoadingMap'
-  | 'onDidFailLoadingMap'
-  | 'onWillStartRenderingFrame'
-  | 'onDidFinishRenderingFrame'
-  | 'onDidFinishRenderingFrameFully'
-  | 'onWillStartRenderingMap'
-  | 'onDidFinishRenderingMap'
-  | 'onDidFinishRenderingMapFully'
-  | 'onDidFinishLoadingStyle'
-  | 'onMapIdle'
-  | 'onCameraChanged';
+const CallbablePropKeys = [
+  'onRegionWillChange',
+  'onRegionIsChanging',
+  'onRegionDidChange',
+  'onUserLocationUpdate',
+  'onWillStartLoadingMap',
+  'onMapLoadingError',
+  'onDidFinishLoadingMap',
+  'onDidFailLoadingMap',
+  'onWillStartRenderingFrame',
+  'onDidFinishRenderingFrame',
+  'onDidFinishRenderingFrameFully',
+  'onWillStartRenderingMap',
+  'onDidFinishRenderingMap',
+  'onDidFinishRenderingMapFully',
+  'onDidFinishLoadingStyle',
+  'onMapIdle',
+  'onCameraChanged',
+] as const;
+
+type CallbablePropKeys = typeof CallbablePropKeys[number];
 
 type CallbablePropKeysWithoutOn = CallbablePropKeys extends `on${infer C}`
   ? C
@@ -551,7 +554,7 @@ class MapView extends NativeBridgeComponent(
     this._onDebouncedRegionWillChange = debounce(
       this._onRegionWillChange.bind(this),
       props.regionWillChangeDebounceTime,
-      true,
+      { immediate: true },
     );
 
     this._onDebouncedRegionDidChange = debounce(
@@ -570,8 +573,16 @@ class MapView extends NativeBridgeComponent(
     this.logger.stop();
   }
 
-  UNSAFE_componentWillReceiveProps(nextProps: Props) {
-    this._setHandledMapChangedEvents(nextProps);
+  componentDidUpdate(prevProps: Props) {
+    const callbackProps = CallbablePropKeys;
+
+    const hasCallbackPropsChanged = callbackProps.some(
+      propName => prevProps[propName] !== this.props[propName]
+    );
+
+    if (hasCallbackPropsChanged) {
+      this._setHandledMapChangedEvents(this.props);
+    }
   }
 
   _setHandledMapChangedEvents(props: Props) {
@@ -917,6 +928,96 @@ class MapView extends NativeBridgeComponent(
   ) {
     this._runNative<void>('setSourceVisibility', [
       visible,
+      sourceId,
+      sourceLayerId,
+    ]);
+  }
+
+  /**
+   * Updates the state map of a feature within a style source.
+   *
+   * Updates entries in the state map of a given feature within a style source.
+   * Only entries listed in the `state` will be updated.
+   * An entry in the feature state map that is not listed in `state` will retain its previous value.
+   *
+   * @param {string} featureId Identifier of the feature whose state should be updated.
+   * @param {[k: string]: NativeArg} state Map of entries to update with their respective new values.
+   * @param {string} sourceId Style source identifier.
+   * @param {string | null} sourceLayerId Style source layer identifier (for multi-layer sources such as vector sources).
+   */
+  async setFeatureState(
+    featureId: string,
+    state: { [k: string]: NativeArg },
+    sourceId: string,
+    sourceLayerId: string | null = null,
+  ): Promise<void> {
+    if (!RNMBXModule.MapboxV10) {
+      console.warn(
+        'RNMapbox: setFeatureState is only implemented in v10 implementation or later',
+      );
+      return;
+    }
+
+    await this._runNative<void>('setFeatureState', [
+      featureId,
+      state,
+      sourceId,
+      sourceLayerId,
+    ]);
+  }
+
+  /**
+   * Returns the state map of a feature within a style source.
+   *
+   * @param {string} featureId Identifier of the feature whose state should be queried.
+   * @param {string} sourceId Style source identifier.
+   * @param {string | null} sourceLayerId Style source layer identifier (for multi-layer sources such as vector sources).
+   */
+  async getFeatureState(
+    featureId: string,
+    sourceId: string,
+    sourceLayerId: string | null = null,
+  ): Promise<Readonly<Record<string, unknown>>> {
+    if (!RNMBXModule.MapboxV10) {
+      console.warn(
+        'RNMapbox: setFeatureState is only implemented in v10 implementation or later',
+      );
+      return {};
+    }
+
+    const res = await this._runNative<{
+      featureState: Readonly<Record<string, unknown>>;
+    }>('getFeatureState', [featureId, sourceId, sourceLayerId]);
+    return res.featureState;
+  }
+
+  /**
+   * Removes entries from a feature state object.
+   *
+   * Removes a specified property or all properties from a feature’s state object,
+   * depending on the value of `stateKey`.
+   *
+   * @param {string} featureId Identifier of the feature whose state should be removed.
+   * @param {string | null} stateKey The name of the property to remove. If `null`, all feature’s state object properties are removed.
+   * @param {string} sourceId Style source identifier.
+   * @param {string | null} sourceLayerId Style source layer identifier (for multi-layer sources such as vector sources).
+   */
+  async removeFeatureState(
+    featureId: string,
+    stateKey: string | null,
+    sourceId: string,
+    sourceLayerId: string | null = null,
+  ): Promise<void> {
+    if (!RNMBXModule.MapboxV10) {
+      console.warn(
+        'RNMapbox: removeFeatureState is only implemented in v10 implementation or later',
+      );
+      return;
+    }
+
+    await this._runNative<void>('removeFeatureState', [
+      featureId,
+      stateKey,
       sourceId,
       sourceLayerId,
     ]);

@@ -21,7 +21,19 @@ typealias ViewRefTag = Double
 open class ViewTagResolver(val context: ReactApplicationContext) {
     private val createdViews: HashSet<Int> = hashSetOf<Int>()
     private val viewWaiters: HashMap<Int, MutableList<ViewTagWaiter<View?>>> = hashMapOf()
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
+    private fun <V>addWaiter(viewTag: Int, reject: Promise?, fn: (V) -> Unit) {
+        val waiter = ViewTagWaiter<View?>({ view ->
+            if (view != null) {
+                fn(view as V)
+            } else {
+                Logger.e(LOG_TAG, "view: $viewTag but is null (timeout or resolve)")
+                reject?.reject(Throwable("view: $viewTag but is null (timeout or resolve)"))
+            }
+        }, reject)
+        viewWaiters.getOrPut(viewTag) { mutableListOf() }.add(waiter)
+    }
     // to be called from view.setId
     fun tagAssigned(viewTag: Int) {
         createdViews.add(viewTag)
@@ -63,19 +75,11 @@ open class ViewTagResolver(val context: ReactApplicationContext) {
                 if (view != null) {
                     fn(view)
                 } else {
-                    Logger.e(LOG_TAG, "view: $resolvedView found with tag: $viewTag but it's either null or not the correct type")
-                    reject?.reject(Throwable("view: $resolvedView found with tag: $viewTag but it's either null or not the correct type"))
+                    addWaiter(viewTag, reject, fn)
                 }
             } catch (err: IllegalViewOperationException) {
                 if (!createdViews.contains(viewTag)) {
-                    viewWaiters.getOrPut(viewTag) { mutableListOf<ViewTagWaiter<View?>>() }.add(ViewTagWaiter<View?>({ view ->
-                        if (view != null) {
-                            fn(view as V)
-                        } else {
-                            Logger.e(LOG_TAG, "view: $viewTag but is null")
-                            reject?.reject(Throwable("view: $viewTag but is null"))
-                        }
-                    }, reject))
+                    addWaiter(viewTag, reject, fn)
                 } else {
                     reject?.reject(err)
                 }

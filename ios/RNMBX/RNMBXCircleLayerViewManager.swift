@@ -1,8 +1,9 @@
+#if !RCT_NEW_ARCH_ENABLED
 @objc(RNMBXCircleLayerViewManager)
 class RNMBXCircleLayerViewManager: RCTViewManager {
     @objc
     override static func requiresMainQueueSetup() -> Bool {
-        return true
+        return false
     }
   
     override func view() -> UIView! {
@@ -11,3 +12,4 @@ class RNMBXCircleLayerViewManager: RCTViewManager {
       return layer
     }
 }
+#endif
