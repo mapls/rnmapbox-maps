@@ -9,7 +9,6 @@
     "web": "expo start -c --web",
     "pod:install": "cd ios && pod install",
     "start": "yarn react-native start",
-    "postinstall": "node ./scripts/set_access_token.js",
     "purge:android": "(cd android && ./gradlew --stop) && rm -rf ~/.gradle/caches/ android/app/build",
     "purge:ios": "rm -rf ios/Pods/* ios/build ~/Library/Caches/CocoaPods ~/Library/Developer/Xcode/DerivedData && pod cache clean --all",
     "purge:js": "rm -rf node_modules && yarn cache clean && watchman watch-del-all",
