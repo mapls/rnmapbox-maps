@@ -39,7 +39,7 @@ class MapView extends React.Component<
   colorOperationInProgress = false;
   // rAF throttling for camera updates
   _rafId: number | null = null;
-  _pendingCameraState: RNMapView.MapState | null = null;
+  _pendingMove = false;
   // Stable context value to avoid re-rendering children unnecessarily
   _contextValue: { map?: mapboxgl.Map } = {};
 
@@ -106,13 +106,13 @@ class MapView extends React.Component<
 
     // Throttle camera updates to animation frames
     const onMove = () => {
-      this._pendingCameraState = currentMapState();
+      this._pendingMove = true;
       if (this._rafId == null) {
         this._rafId = window.requestAnimationFrame(() => {
           this._rafId = null;
-          if (this._pendingCameraState) {
-            this.handleCameraChanged(this._pendingCameraState);
-            this._pendingCameraState = null;
+          if (this._pendingMove) {
+            this._pendingMove = false;
+            this.handleCameraChanged(currentMapState());
           }
         });
       }
