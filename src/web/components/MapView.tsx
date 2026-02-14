@@ -40,6 +40,13 @@ class MapView extends React.Component<
   // rAF throttling for camera updates
   _rafId: number | null = null;
   _pendingMove = false;
+  // Bound visibility handler for cleanup
+  _onVisibilityChange: (() => void) | null = null;
+  // Pre-allocated state objects to avoid per-frame GC pressure
+  _moveState: RNMapView.MapState = {
+    properties: { center: [0, 0], zoom: 0, pitch: 0, heading: 0, bounds: { ne: [0, 0], sw: [0, 0] } },
+    gestures: { isGestureActive: false },
+  };
   // Stable context value to avoid re-rendering children unnecessarily
   _contextValue: { map?: mapboxgl.Map } = {};
 
@@ -65,6 +72,23 @@ class MapView extends React.Component<
         console.log('Map webglcontextlost event triggered.');
         window.location.reload();
       });
+
+      // Browsers often reclaim GPU resources from backgrounded tabs without
+      // firing webglcontextlost. Check context health when the tab returns.
+      this._onVisibilityChange = () => {
+        if (document.visibilityState !== 'visible' || !this.map) return;
+        const canvas = this.map.getCanvas();
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!gl || gl.isContextLost()) {
+          console.log('WebGL context lost detected on tab visible — reloading.');
+          window.location.reload();
+          return;
+        }
+        // Context alive but tiles may be stale — force repaint
+        this.map.resize();
+        this.map.triggerRepaint();
+      };
+      document.addEventListener('visibilitychange', this._onVisibilityChange);
     }
 
     map.on('mousedown', (e: MapMouseEvent) => {
@@ -84,27 +108,25 @@ class MapView extends React.Component<
       this.handleMapPress(point);
     });
 
-    const currentMapState = () => {
-      // @ts-expect-error - Partially implement for now.
-      const state: RNMapView.MapState = {
+    // Full state snapshot — only used for idle (includes expensive getBounds)
+    const fullMapState = (): RNMapView.MapState => {
+      const c = map.getCenter();
+      const b = map.getBounds()!;
+      const ne = b.getNorthEast();
+      const sw = b.getSouthWest();
+      return {
         properties: {
-          center: [map.getCenter().lng, map.getCenter().lat],
+          center: [c.lng, c.lat],
           zoom: map.getZoom(),
           pitch: map.getPitch(),
           heading: map.getBearing(),
-          bounds: (() => {
-            const b = map.getBounds();
-            const ne = b?.getNorthEast().toArray() ?? [0, 0];
-            const sw = b?.getSouthWest().toArray() ?? [0, 0];
-            return { ne, sw };
-          })(),
+          bounds: { ne: [ne.lng, ne.lat], sw: [sw.lng, sw.lat] },
         },
+        gestures: { isGestureActive: false },
       };
-
-      return state;
     };
 
-    // Throttle camera updates to animation frames
+    // Throttle camera updates to animation frames — reuse pre-allocated object
     const onMove = () => {
       this._pendingMove = true;
       if (this._rafId == null) {
@@ -112,14 +134,22 @@ class MapView extends React.Component<
           this._rafId = null;
           if (this._pendingMove) {
             this._pendingMove = false;
-            this.handleCameraChanged(currentMapState());
+            // Mutate pre-allocated state in-place — no allocations
+            const c = map.getCenter();
+            const props = this._moveState.properties;
+            (props.center as number[])[0] = c.lng;
+            (props.center as number[])[1] = c.lat;
+            props.zoom = map.getZoom();
+            props.pitch = map.getPitch();
+            props.heading = map.getBearing();
+            this.handleCameraChanged(this._moveState);
           }
         });
       }
     };
 
     map.on('move', onMove);
-    map.on('idle', () => this.handleMapOnIdle(currentMapState()));
+    map.on('idle', () => this.handleMapOnIdle(fullMapState()));
     // Use styledataloading to avoid repeated styledata storms
     map.on('styledataloading', () => {
       const { onWillStartLoadingMap } = this.props;
@@ -141,16 +171,20 @@ class MapView extends React.Component<
   }
 
   componentWillUnmount() {
+    if (this._onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._onVisibilityChange);
+      this._onVisibilityChange = null;
+    }
     if (this._rafId != null) {
       try {
         cancelAnimationFrame(this._rafId);
-      } catch {}
+      } catch { }
       this._rafId = null;
     }
     if (this.map) {
       try {
         this.map.remove();
-      } catch {}
+      } catch { }
       this.map = null;
     }
   }
