@@ -1,4 +1,3 @@
-#ifdef RCT_NEW_ARCH_ENABLED
 
 #import "RNMBXRasterArraySourceComponentView.h"
 #import "RNMBXFabricHelpers.h"
@@ -15,8 +14,6 @@ using namespace facebook::react;
 
 @interface RNMBXRasterArraySourceComponentView () <RCTRNMBXRasterArraySourceViewProtocol>
 @end
-
-#if RNMBX_11
 
 @implementation RNMBXRasterArraySourceComponentView {
     RNMBXRasterArraySource *_view;
@@ -117,45 +114,9 @@ using namespace facebook::react;
 
 @end
 
-#else // !RNMBX_11
-
-// RasterArraySource is only available in Mapbox v11+
-// Provide a stub implementation for v10 builds
-
-@implementation RNMBXRasterArraySourceComponentView
-
-+ (void)load
-{
-  [super load];
-}
-
-- (instancetype)initWithFrame:(CGRect)frame
-{
-  if (self = [super initWithFrame:frame]) {
-    static const auto defaultProps = std::make_shared<const RNMBXRasterArraySourceProps>();
-    _props = defaultProps;
-  }
-  return self;
-}
-
-+ (ComponentDescriptorProvider)componentDescriptorProvider
-{
-  return concreteComponentDescriptorProvider<RNMBXRasterArraySourceComponentDescriptor>();
-}
-
-- (void)updateProps:(const Props::Shared &)props oldProps:(const Props::Shared &)oldProps
-{
-  [super updateProps:props oldProps:oldProps];
-}
-
-@end
-
-#endif // RNMBX_11
-
 Class<RCTComponentViewProtocol> RNMBXRasterArraySourceCls(void)
 {
   return RNMBXRasterArraySourceComponentView.class;
 }
 
 
-#endif // RCT_NEW_ARCH_ENABLED

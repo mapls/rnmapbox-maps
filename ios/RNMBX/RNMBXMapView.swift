@@ -71,15 +71,10 @@ class FeatureEntry {
   }
 }
 
-#if RNMBX_11
 extension QueriedRenderedFeature {
   var feature : Feature { return queriedFeature.feature }
 }
-#else
-typealias QueriedRenderedFeature = QueriedFeature
-#endif
 
-#if RNMBX_11
 public struct MapEventType<Payload> {
     var method: (_ map: MapboxMap) -> Signal<Payload>
 
@@ -118,7 +113,6 @@ public struct MapEventType<Payload> {
 }
 
 typealias MapLoadingErrorPayload = MapLoadingError
-#endif
 
 class RNMBXCameraChanged : RNMBXEvent, RCTEvent {
   init(type: EventType, payload: [String:Any?]?, reactTag: NSNumber) {
@@ -185,10 +179,8 @@ open class RNMBXMapView: UIView, RCTInvalidating {
   public func invalidate() {
     self.removeAllFeaturesFromMap(reason: .ViewRemoval)
 
-#if RNMBX_11
     cancelables.forEach { $0.cancel() }
     cancelables.removeAll()
-#endif
 
     _mapView.gestures.delegate = nil
     _mapView.removeFromSuperview()
@@ -235,9 +227,7 @@ open class RNMBXMapView: UIView, RCTInvalidating {
   @objc
   public var mapViewImpl : String? = nil
 
-#if RNMBX_11
   var cancelables = Set<AnyCancelable>()
-#endif
 
   lazy var pointAnnotationManager : RNMBXPointAnnotationManager = {
     let result = RNMBXPointAnnotationManager(annotations: mapView.annotations, mapView: mapView)
@@ -254,16 +244,7 @@ open class RNMBXMapView: UIView, RCTInvalidating {
     if let mapViewImpl = mapViewImpl, let mapViewInstance = createAndAddMapViewImpl(mapViewImpl, self) {
       _mapView = mapViewInstance
     } else {
-  #if RNMBX_11
       _mapView = MapView(frame: self.bounds, mapInitOptions:  MapInitOptions())
-  #else
-      let accessToken = RNMBXModule.accessToken
-      if accessToken == nil {
-        Logger.log(level: .error, message: "No accessToken set, please call Mapbox.setAccessToken(...)")
-      }
-      let resourceOptions = ResourceOptions(accessToken: accessToken ?? "")
-      _mapView = MapView(frame: frame, mapInitOptions: MapInitOptions(resourceOptions: resourceOptions))
-  #endif
       _mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       addSubview(_mapView)
     }
@@ -597,9 +578,7 @@ open class RNMBXMapView: UIView, RCTInvalidating {
     var rotateEnabled: Bool? = nil;
     var panEnabled: Bool? = nil;
     var panDecelerationFactor: CGFloat? = nil;
-    #if RNMBX_11
     var simultaneousRotateAndPinchZoomEnabled: Bool? = nil;
-    #endif
   }
 
   var gestureSettings = GestureSettings()
@@ -644,11 +623,9 @@ open class RNMBXMapView: UIView, RCTInvalidating {
       if let panDecelerationFactor = value["panDecelerationFactor"] as? NSNumber {
         options.panDecelerationFactor = panDecelerationFactor.CGFloat
       }
-#if RNMBX_11
       if let simultaneousRotateAndPinchZoomEnabled = value["simultaneousRotateAndPinchZoomEnabled"] as? NSNumber {
         options.simultaneousRotateAndPinchZoomEnabled = simultaneousRotateAndPinchZoomEnabled.boolValue
       }
-#endif
       /* android only
        if let zoomAnimationAmount = value["zoomAnimationAmount"] as? NSNumber {
        options.zoomAnimationAmount = zoomAnimationAmount.CGFloat
@@ -694,11 +671,9 @@ open class RNMBXMapView: UIView, RCTInvalidating {
       if let panDecelerationFactor = settings.panDecelerationFactor as? CGFloat {
         options.panDecelerationFactor = panDecelerationFactor
       }
-#if RNMBX_11
       if let simultaneousRotateAndPinchZoomEnabled = settings.simultaneousRotateAndPinchZoomEnabled as? Bool {
         options.simultaneousRotateAndPinchZoomEnabled = simultaneousRotateAndPinchZoomEnabled
       }
-#endif
       /* android only
        if let zoomAnimationAmount = value["zoomAnimationAmount"] as? NSNumber {
        options.zoomAnimationAmount = zoomAnimationAmount.CGFloat
@@ -1048,7 +1023,6 @@ open class RNMBXMapView: UIView, RCTInvalidating {
 // MARK: - event handlers
 
 extension RNMBXMapView {
-  #if RNMBX_11
   private func onEvery<T>(event: MapEventType<T>, handler: @escaping (RNMBXMapView, T) -> Void) {
     let signal = event.method(self.mapView.mapboxMap)
     signal.observe { [weak self] (mapEvent) in
@@ -1066,27 +1040,6 @@ extension RNMBXMapView {
       handler(self, mapEvent)
     }.store(in: &cancelables)
   }
-  #else
-  private func onEvery<Payload>(event: MapEvents.Event<Payload>, handler: @escaping  (RNMBXMapView, MapEvent<Payload>) -> Void) {
-    let eventListener = self.mapView.mapboxMap.onEvery(event: event) { [weak self](mapEvent) in
-      guard let self = self else { return }
-
-      handler(self, mapEvent)
-    }
-    eventListeners.append(eventListener)
-    if eventListeners.count > 20 {
-      Logger.log(level:.warn, message: "RNMBXMapView.onEvery, too much handler installed");
-    }
-  }
-
-  private func onNext<Payload>(event: MapEvents.Event<Payload>, handler: @escaping  (RNMBXMapView, MapEvent<Payload>) -> Void) {
-    self.mapView.mapboxMap.onNext(event: event) { [weak self](mapEvent) in
-      guard let self = self else { return }
-
-      handler(self, mapEvent)
-    }
-  }
-  #endif
 
   @objc public func setReactOnMapChange(_ value: @escaping RCTBubblingEventBlock) {
     self.reactOnMapChange = value
@@ -1183,11 +1136,7 @@ extension RNMBXMapView {
   public func setupEvents() {
     self.onEvery(event: .mapLoadingError, handler: { (self, event) in
       let eventPayload : MapLoadingErrorPayload = event.payload
-      #if RNMBX_11
       let error = eventPayload
-      #else
-      let error = eventPayload.error
-      #endif
       var payload : [String:String] = [
         "error": error.errorDescription ?? error.localizedDescription
       ]
@@ -1339,11 +1288,7 @@ extension RNMBXMapView {
 
 extension MapboxMaps.PointAnnotationManager {
   public func refresh() {
-    #if !RNMBX_11
-    syncSourceAndLayerIfNeeded()
-    #else
     self.annotations = annotations
-    #endif
   }
 }
 
@@ -1587,7 +1532,6 @@ extension RNMBXMapView {
 
 typealias LayerSourceDetails = (source: String?, sourceLayer: String?)
 
-#if RNMBX_11
 func getLayerSourceDetails(layer: (any Layer)?) -> LayerSourceDetails? {
     if let circleLayer = layer as? CircleLayer {
         return (circleLayer.source, circleLayer.sourceLayer)
@@ -1609,7 +1553,6 @@ func getLayerSourceDetails(layer: (any Layer)?) -> LayerSourceDetails? {
         return nil
     }
 }
-#endif
 
 extension RNMBXMapView {
   func setSourceVisibility(_ visible: Bool, sourceId: String, sourceLayerId: String?) -> Void {
@@ -1620,11 +1563,7 @@ extension RNMBXMapView {
         try style.layer(withId: layerInfo.id)
       }
 
-      #if RNMBX_11
-        let sourceDetails = getLayerSourceDetails(layer: layer)
-      #else
-        let sourceDetails: LayerSourceDetails? = (source: layer?.source, sourceLayer: layer?.sourceLayer)
-      #endif
+      let sourceDetails = getLayerSourceDetails(layer: layer)
 
       if let layer = layer, let sourceDetails = sourceDetails {
         if sourceDetails.source == sourceId {
@@ -1642,6 +1581,304 @@ extension RNMBXMapView {
             }
           }
         }
+      }
+    }
+  }
+}
+
+// MARK: - Module methods
+
+extension QueriedSourceFeature {
+  var feature: Feature { return self.queriedFeature.feature }
+}
+
+extension RNMBXMapView {
+  @objc public func takeSnapWithWriteToDisk(
+    _ writeToDisk: Bool,
+    resolver: @escaping RCTPromiseResolveBlock
+  ) {
+    let uri = self.takeSnap(writeToDisk: writeToDisk)
+    resolver(["uri": uri.absoluteString])
+  }
+
+  @objc public func queryTerrainElevationWithCoordinates(
+    _ coordinates: [NSNumber],
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    let result = self.queryTerrainElevation(coordinates: coordinates)
+    if let result = result {
+      resolver(["data": NSNumber(value: result)])
+    } else {
+      resolver(nil)
+    }
+  }
+
+  @objc public func setSourceVisibilityWithVisible(
+    _ visible: Bool,
+    sourceId: String,
+    sourceLayerId: String?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.setSourceVisibility(visible, sourceId: sourceId, sourceLayerId: sourceLayerId)
+    resolver(nil)
+  }
+
+  @objc public func getCenterWithResolver(
+    _ resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      resolver([
+        "center": [
+          map.cameraState.center.longitude,
+          map.cameraState.center.latitude,
+        ]
+      ])
+    }
+  }
+
+  @objc public func getCoordinateFromViewWithAtPoint(
+    _ point: CGPoint,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      let coordinates = map.coordinate(for: point)
+      resolver(["coordinateFromView": [coordinates.longitude, coordinates.latitude]])
+    }
+  }
+
+  @objc public func getPointInViewWithAtCoordinate(
+    _ coordinate: [NSNumber],
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      let coordinate = CLLocationCoordinate2DMake(
+        coordinate[1].doubleValue, coordinate[0].doubleValue)
+      let point = map.point(for: coordinate)
+      resolver(["pointInView": [(point.x), (point.y)]])
+    }
+  }
+
+  @objc public func setHandledMapChangedEventsWithEvents(
+    _ events: [String],
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.handleMapChangedEvents = Set(
+      events.compactMap {
+        RNMBXEvent.EventType(rawValue: $0)
+      })
+    resolver(nil)
+  }
+
+  @objc public func getZoomWithResolver(
+    _ resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      resolver(["zoom": map.cameraState.zoom])
+    }
+  }
+
+  @objc public func getVisibleBoundsWithResolver(
+    _ resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      resolver(["visibleBounds": map.coordinateBounds(for: self.bounds).toArray()])
+    }
+  }
+
+  @objc public func setFeatureStateWithFeatureId(
+    _ featureId: String,
+    state: [String: Any],
+    sourceId: String,
+    sourceLayerId: String?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      map.setFeatureState(
+        sourceId: sourceId,
+        sourceLayerId: sourceLayerId,
+        featureId: featureId,
+        state: state
+      ) { result in
+        switch result {
+        case .success: resolver(nil)
+        case .failure(let error): rejecter("setFeatureState", "failed to set feature state", error)
+        }
+      }
+    }
+  }
+
+  @objc public func getFeatureStateWithFeatureId(
+    _ featureId: String,
+    sourceId: String,
+    sourceLayerId: String?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      map.getFeatureState(
+        sourceId: sourceId,
+        sourceLayerId: sourceLayerId,
+        featureId: featureId
+      ) { result in
+        switch result {
+        case .success(let featureState):
+          resolver(["featureState": featureState])
+        case .failure(let error):
+          rejecter("getFeatureState", "failed to get feature state", error)
+        }
+      }
+    }
+  }
+
+  @objc public func removeFeatureStateWithFeatureId(
+    _ featureId: String,
+    stateKey: String?,
+    sourceId: String,
+    sourceLayerId: String?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      map.removeFeatureState(
+        sourceId: sourceId,
+        sourceLayerId: sourceLayerId,
+        featureId: featureId,
+        stateKey: stateKey
+      ) { result in
+        switch result {
+        case .success: resolver(nil)
+        case .failure(let error): rejecter("removeFeatureState", "failed to remove feature state", error)
+        }
+      }
+    }
+  }
+
+  @objc public func queryRenderedFeaturesAtPointWithAtPoint(
+    _ point: [NSNumber],
+    withFilter filter: [Any]?,
+    withLayerIDs layerIDs: [String]?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    self.withMapboxMap { map in
+      let point = CGPoint(x: CGFloat(point[0].floatValue), y: CGFloat(point[1].floatValue))
+
+      logged("queryRenderedFeaturesAtPoint.option", rejecter: rejecter) {
+        let options = try RenderedQueryOptions(
+          layerIds: (layerIDs ?? []).isEmpty ? nil : layerIDs, filter: filter?.asExpression())
+
+        map.queryRenderedFeatures(with: point, options: options) { result in
+          switch result {
+          case .success(let features):
+            resolver([
+              "data": [
+                "type": "FeatureCollection",
+                "features": features.compactMap { queriedFeature in
+                  logged("queryRenderedFeaturesAtPoint.feature.toJSON") {
+                    try queriedFeature.feature.toJSON()
+                  }
+                },
+              ]
+            ])
+          case .failure(let error):
+            rejecter("queryRenderedFeaturesAtPoint", "failed to query features", error)
+          }
+        }
+      }
+    }
+  }
+
+  @objc public func queryRenderedFeaturesInRectWithBBox(
+    _ bbox: [NSNumber],
+    withFilter filter: [Any]?,
+    withLayerIDs layerIDs: [String]?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    let top = bbox.isEmpty ? 0.0 : CGFloat(bbox[0].floatValue)
+    let right = bbox.isEmpty ? 0.0 : CGFloat(bbox[1].floatValue)
+    let bottom = bbox.isEmpty ? 0.0 : CGFloat(bbox[2].floatValue)
+    let left = bbox.isEmpty ? 0.0 : CGFloat(bbox[3].floatValue)
+    let rect =
+      bbox.isEmpty
+      ? CGRect(x: 0.0, y: 0.0, width: self.bounds.size.width, height: self.bounds.size.height)
+      : CGRect(
+        x: [left, right].min()!, y: [top, bottom].min()!, width: abs(right - left),
+        height: abs(bottom - top))
+    logged("queryRenderedFeaturesInRect.option", rejecter: rejecter) {
+      let options = try RenderedQueryOptions(
+        layerIds: layerIDs?.isEmpty ?? true ? nil : layerIDs, filter: filter?.asExpression())
+      self.mapboxMap.queryRenderedFeatures(with: rect, options: options) { result in
+        switch result {
+        case .success(let features):
+          resolver([
+            "data": [
+              "type": "FeatureCollection",
+              "features": features.compactMap { queriedFeature in
+                logged("queryRenderedFeaturesInRect.queriedfeature.map") {
+                  try queriedFeature.feature.toJSON()
+                }
+              },
+            ]
+          ])
+        case .failure(let error):
+          rejecter("queryRenderedFeaturesInRect", "failed to query features", error)
+        }
+      }
+    }
+  }
+
+  @objc public func querySourceFeaturesWithSourceId(
+    _ sourceId: String,
+    withFilter filter: [Any]?,
+    withSourceLayerIds sourceLayerIds: [String]?,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    let sourceLayerIds = sourceLayerIds?.isEmpty ?? true ? nil : sourceLayerIds
+    logged("querySourceFeatures.option", rejecter: rejecter) {
+      let options = SourceQueryOptions(
+        sourceLayerIds: sourceLayerIds, filter: filter ?? Exp(arguments: []))
+      self.mapboxMap.querySourceFeatures(for: sourceId, options: options) { result in
+        switch result {
+        case .success(let features):
+          resolver([
+            "data": [
+              "type": "FeatureCollection",
+              "features": features.compactMap { queriedFeature in
+                logged("querySourceFeatures.queriedfeature.map") {
+                  try queriedFeature.feature.toJSON()
+                }
+              },
+            ] as [String: Any]
+          ])
+        case .failure(let error):
+          rejecter(
+            "querySourceFeatures",
+            "failed to query source features: \(error.localizedDescription)", error)
+        }
+      }
+    }
+  }
+
+  @objc public func clearDataWithResolver(
+    _ resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    MapboxMap.clearData { error in
+      if let error = error {
+        rejecter("clearData", "failed to clearData: \(error.localizedDescription)", error)
+      } else {
+        resolver(nil)
       }
     }
   }
@@ -1690,12 +1927,10 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
         return rnmbxPointAnnotation
       }
     }
-    #if RNMBX_11
     // see https://github.com/rnmapbox/maps/issues/3121
     if let rnmbxPointAnnotation = annotations.object(forKey: annotation.id as NSString) {
       return rnmbxPointAnnotation;
     }
-    #endif
     return nil
   }
 
@@ -1879,19 +2114,15 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
     manager.annotations.removeAll(where: {$0.id == annotation.id})
   }
 
-  #if RNMBX_11
   var annotations = NSMapTable<NSString, RNMBXPointAnnotation>.init(
         keyOptions: .copyIn,
         valueOptions: .weakMemory
     )
-  #endif
 
   func add(_ annotation: PointAnnotation, _ rnmbxPointAnnotation: RNMBXPointAnnotation) {
     manager.annotations.append(annotation)
     manager.refresh()
-    #if RNMBX_11
     annotations.setObject(rnmbxPointAnnotation, forKey: annotation.id as NSString)
-    #endif
   }
 
   func update(_ annotation: PointAnnotation) {
