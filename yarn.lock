@@ -4619,7 +4619,7 @@ __metadata:
     typescript: 5.9.2
   peerDependencies:
     expo: ">=47.0.0"
-    mapbox-gl: ^2.9.0
+    mapbox-gl: ">=2.9.0"
     react: ">=17.0.0"
     react-dom: ">= 17.0.0"
     react-native: ">=0.79"
