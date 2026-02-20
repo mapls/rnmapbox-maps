@@ -306,10 +306,6 @@ class MapView extends React.Component<
   setLandColor = (color: string) => {
     if (!this.map || !this.mapContainer) return;
 
-    if (this.originalLandColors.length > 0) {
-      this.resetLandColors();
-    }
-
     if (!this.map.isStyleLoaded()) {
       const styleLoadListener = () => {
         this.colorLand(color);
