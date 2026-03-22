@@ -66,6 +66,10 @@ const styleMap = {
   linePattern: StyleTypes.Image,
   lineGradient: StyleTypes.Color,
   lineTrimOffset: StyleTypes.Constant,
+  lineBorderWidth: StyleTypes.Constant,
+  lineBorderWidthTransition: StyleTypes.Transition,
+  lineBorderColor: StyleTypes.Color,
+  lineBorderColorTransition: StyleTypes.Transition,
   lineZOffset: StyleTypes.Constant,
   lineElevationReference: StyleTypes.Enum,
   lineCrossSlope: StyleTypes.Constant,
@@ -286,6 +290,7 @@ const styleMap = {
   hillshadeAccentColor: StyleTypes.Color,
   hillshadeAccentColorTransition: StyleTypes.Transition,
 
+  modelAllowDensityReduction: StyleTypes.Constant,
   modelId: StyleTypes.Constant,
   modelOpacity: StyleTypes.Constant,
   modelOpacityTransition: StyleTypes.Transition,
@@ -311,6 +316,7 @@ const styleMap = {
   modelHeightBasedEmissiveStrengthMultiplier: StyleTypes.Constant,
   modelHeightBasedEmissiveStrengthMultiplierTransition: StyleTypes.Transition,
   modelCutoffFadeRange: StyleTypes.Constant,
+  modelElevationReference: StyleTypes.Enum,
 
   backgroundColor: StyleTypes.Color,
   backgroundColorTransition: StyleTypes.Transition,

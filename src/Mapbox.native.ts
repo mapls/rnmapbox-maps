@@ -9,7 +9,11 @@ export {
   type CameraStop,
 } from './components/Camera';
 export { Atmosphere } from './components/Atmosphere';
-export { default as MapView, type MapState } from './components/MapView';
+export {
+  default as MapView,
+  type MapState,
+  type ScreenPointPayload,
+} from './components/MapView';
 export { default as Light } from './components/Light';
 export { default as PointAnnotation } from './components/PointAnnotation';
 export { default as Annotation } from './components/Annotation';
@@ -40,6 +44,7 @@ export { default as ModelLayer } from './components/ModelLayer';
 export { SymbolLayer } from './components/SymbolLayer';
 export { default as RasterLayer } from './components/RasterLayer';
 export { default as RasterParticleLayer } from './components/RasterParticleLayer';
+export { default as HillshadeLayer } from './components/HillshadeLayer';
 export { default as BackgroundLayer } from './components/BackgroundLayer';
 export { default as CustomLocationProvider } from './components/CustomLocationProvider';
 export { Terrain } from './components/Terrain';

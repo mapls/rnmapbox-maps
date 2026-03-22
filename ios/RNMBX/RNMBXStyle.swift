@@ -154,6 +154,14 @@ func lineLayer(layer: inout LineLayer, reactStyle:Dictionary<String, Any>, oldRe
       self.setLineGradient(&layer, styleValue:styleValue);
     } else if (prop == "lineTrimOffset") {
       self.setLineTrimOffset(&layer, styleValue:styleValue);
+    } else if (prop == "lineBorderWidth") {
+      self.setLineBorderWidth(&layer, styleValue:styleValue);
+    } else if (prop == "lineBorderWidthTransition") {
+      self.setLineBorderWidthTransition(&layer, styleValue:styleValue);
+    } else if (prop == "lineBorderColor") {
+      self.setLineBorderColor(&layer, styleValue:styleValue);
+    } else if (prop == "lineBorderColorTransition") {
+      self.setLineBorderColorTransition(&layer, styleValue:styleValue);
     } else if (prop == "lineZOffset") {
       self.setLineZOffset(&layer, styleValue:styleValue);
     } else if (prop == "lineElevationReference") {
@@ -798,7 +806,9 @@ func modelLayer(layer: inout ModelLayer, reactStyle:Dictionary<String, Any>, old
 
     let styleValue = RNMBXStyleValue.make(reactStyle[prop])
 
-      if (prop == "visibility") {
+      if (prop == "modelAllowDensityReduction") {
+      self.setModelAllowDensityReduction(&layer, styleValue:styleValue);
+    } else if (prop == "visibility") {
       self.setModelStyleLayerVisibility(&layer, styleValue:styleValue);
     } else if (prop == "modelId") {
       self.setModelId(&layer, styleValue:styleValue);
@@ -850,6 +860,8 @@ func modelLayer(layer: inout ModelLayer, reactStyle:Dictionary<String, Any>, old
       self.setModelHeightBasedEmissiveStrengthMultiplierTransition(&layer, styleValue:styleValue);
     } else if (prop == "modelCutoffFadeRange") {
       self.setModelCutoffFadeRange(&layer, styleValue:styleValue);
+    } else if (prop == "modelElevationReference") {
+      self.setModelElevationReference(&layer, styleValue:styleValue);
     } else {
       Logger.log(level:.error, message: "Unexpected property \(prop) for layer: model")
     }
@@ -1369,6 +1381,34 @@ func setLineTrimOffset(_ layer: inout LineLayer, styleValue: RNMBXStyleValue)
           layer.lineTrimOffset = styleValue.mglStyleValueArrayNumber();
         
       
+}
+
+func setLineBorderWidth(_ layer: inout LineLayer, styleValue: RNMBXStyleValue)
+{
+      
+        
+          layer.lineBorderWidth = styleValue.mglStyleValueNumber();
+        
+      
+}
+
+func setLineBorderWidthTransition(_ layer: inout LineLayer, styleValue: RNMBXStyleValue)
+{
+    layer.lineBorderWidthTransition = styleValue.getTransition();
+}
+
+func setLineBorderColor(_ layer: inout LineLayer, styleValue: RNMBXStyleValue)
+{
+      
+        
+          layer.lineBorderColor = styleValue.mglStyleValueColor();
+        
+      
+}
+
+func setLineBorderColorTransition(_ layer: inout LineLayer, styleValue: RNMBXStyleValue)
+{
+    layer.lineBorderColorTransition = styleValue.getTransition();
 }
 
 func setLineZOffset(_ layer: inout LineLayer, styleValue: RNMBXStyleValue)
@@ -3057,6 +3097,15 @@ func setHillshadeAccentColorTransition(_ layer: inout HillshadeLayer, styleValue
 
 
 
+func setModelAllowDensityReduction(_ layer: inout ModelLayer, styleValue: RNMBXStyleValue)
+{
+      
+        
+          layer.modelAllowDensityReduction = styleValue.mglStyleValueBoolean();
+        
+      
+}
+
 func setModelStyleLayerVisibility(_ layer: inout ModelLayer, styleValue: RNMBXStyleValue)
 {
     layer.visibility = styleValue.isVisible();
@@ -3243,6 +3292,15 @@ func setModelCutoffFadeRange(_ layer: inout ModelLayer, styleValue: RNMBXStyleVa
       
         
           layer.modelCutoffFadeRange = styleValue.mglStyleValueNumber();
+        
+      
+}
+
+func setModelElevationReference(_ layer: inout ModelLayer, styleValue: RNMBXStyleValue)
+{
+      
+        
+          layer.modelElevationReference = styleValue.mglStyleValueEnum();
         
       
 }

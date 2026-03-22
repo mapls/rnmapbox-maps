@@ -380,6 +380,23 @@
       },
       {
         "metadata": {
+          "title": "Screen Coordinates",
+          "tags": [
+            "MapView#onPress",
+            "MapView#onLongPress",
+            "MapView#getCoordinateFromView",
+            "MapView#getPointInView",
+            "MapView#queryRenderedFeaturesAtPoint",
+            "MapView#queryRenderedFeaturesInRect"
+          ],
+          "docs": "\nTests conversion from screen to geographic coordinates and vice versa.        \n"
+        },
+        "fullPath": "example/src/examples/Map/ScreenCoordinates.tsx",
+        "relPath": "Map/ScreenCoordinates.tsx",
+        "name": "ScreenCoordinates"
+      },
+      {
+        "metadata": {
           "title": "Show and hide layer",
           "tags": [
             "FillLayer#existing",
@@ -631,9 +648,11 @@
           "title": "Marker View",
           "tags": [
             "PointAnnotation",
-            "MarkerView"
+            "MarkerView",
+            "Slider",
+            "Interactive"
           ],
-          "docs": "\nShows marker view and point annotations\n"
+          "docs": "\nShows marker view and point annotations, including an interactive marker with\nsliders, switch, counter, text input, and pressable button to verify complex\ntouch interactions inside a MarkerView.\n"
         },
         "fullPath": "example/src/examples/Annotations/MarkerView.tsx",
         "relPath": "Annotations/MarkerView.tsx",
@@ -711,12 +730,26 @@
       },
       {
         "metadata": {
+          "title": "Hillshade Layer",
+          "tags": [
+            "RasterDemSource",
+            "HillshadeLayer"
+          ],
+          "docs": "Renders terrain hillshading from a raster-dem source."
+        },
+        "fullPath": "example/src/examples/FillRasterLayer/HillshadeSource.tsx",
+        "relPath": "FillRasterLayer/HillshadeSource.tsx",
+        "name": "HillshadeSource"
+      },
+      {
+        "metadata": {
           "title": "Image Overlay",
           "tags": [
             "RasterLayer",
             "ImageSource"
           ],
-          "docs": ""
+          "docs": "",
+          "disableSync": true
         },
         "fullPath": "example/src/examples/FillRasterLayer/ImageOverlay.js",
         "relPath": "FillRasterLayer/ImageOverlay.js",
