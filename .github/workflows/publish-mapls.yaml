@@ -24,15 +24,14 @@ jobs:
         run: yarn install --immutable
       - name: Authenticate with registry
         run: |
-          npm install -g -y npm-cli-login
-          npm-cli-login -u cibot -p ${{ secrets.CI_BOT_PASSWORD }} -e support@mapls.ee -r https://registry.mapls.ee
-      - name: Configure .npmrc
+          NPM_TOKEN=$(curl -sf -X POST \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"cibot\",\"password\":\"${{ secrets.CI_BOT_PASSWORD }}\"}" \
+            https://registry.mapls.ee/-/verdaccio/sec/login \
+            | jq -r '.token')
+          echo "NPM_TOKEN=${NPM_TOKEN}" >> "$GITHUB_ENV"
+      - name: Publish to Mapls npm
         run: |
-          cat <<EOF >> ~/.npmrc
-          //registry.mapls.ee/:username=cibot
-          //registry.mapls.ee/:_password=$(echo -n \${{ secrets.CI_BOT_PASSWORD }} | base64)
-          //registry.mapls.ee/:email=support@mapls.ee
-          registry=https://registry.mapls.ee
-          EOF
-      - name: Publish to Mapls npm 📦
-        run: npm publish
+          echo "//registry.mapls.ee/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          echo "registry=https://registry.mapls.ee" >> ~/.npmrc
+          npm publish
