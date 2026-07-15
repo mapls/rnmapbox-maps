@@ -27,7 +27,7 @@ class MapView extends React.Component<
     onDidFinishLoadingMap?: () => void;
     _setStyleURL: (props: styleURLProps) => void;
     setMonochrome: (enabled: boolean) => void;
-    reloadOnContextLost?: boolean;
+    recoverOnContextLost?: boolean;
   } & {
     map?: mapboxgl.Map | null;
   }
@@ -49,12 +49,42 @@ class MapView extends React.Component<
   };
   // Stable context value to avoid re-rendering children unnecessarily
   _contextValue: { map?: mapboxgl.Map } = {};
+  // WebGL context-loss recovery state
+  _contextLost = false;
+  _graceTimer: number | null = null;
+  _retryTimer: number | null = null;
+  _recreateAttempts = 0;
+  _pendingRecreateOpts: Partial<mapboxgl.MapOptions> | null = null;
+  _lastLandColor: string | null = null;
+
+  // Give the browser a chance to fire webglcontextrestored (mapbox-gl fully
+  // self-heals on it) before recreating the map ourselves.
+  static RECOVERY_GRACE_MS = 1500;
+  // In-place recreation attempts before falling back to a full page reload.
+  static RECOVERY_MAX_ATTEMPTS = 3;
+  // Backoff between failed creation attempts: 1s, 2s, 4s.
+  static RECOVERY_BACKOFF_MS = 1000;
 
   componentDidMount() {
-    const { styleURL } = this.props;
     if (!this.mapContainer) {
       console.error('MapView - mapContainer should is null');
       return;
+    }
+
+    if (this.props.recoverOnContextLost) {
+      // Registered once for the component lifetime, not per map instance,
+      // so recreation never stacks duplicate listeners.
+      this._onVisibilityChange = this._handleVisibilityChange;
+      document.addEventListener('visibilitychange', this._onVisibilityChange);
+    }
+
+    this._tryCreateMap();
+  }
+
+  _createMap = (cameraOpts?: Partial<mapboxgl.MapOptions>) => {
+    const { styleURL } = this.props;
+    if (!this.mapContainer) {
+      throw new Error('MapView - mapContainer is null');
     }
 
     const map = new mapboxgl.Map({
@@ -62,33 +92,24 @@ class MapView extends React.Component<
       style: styleURL || 'mapbox://styles/mapbox/streets-v12',
       maxPitch: 60,
       antialias: false,
+      ...cameraOpts,
     });
 
     /* eslint-disable dot-notation */
     map.touchZoomRotate['_tapDragZoom']['_enabled'] = false;
 
-    if (this.props.reloadOnContextLost) {
+    if (this.props.recoverOnContextLost) {
       map.on('webglcontextlost', () => {
-        console.log('Map webglcontextlost event triggered.');
-        window.location.reload();
+        console.log('MapView: webgl context lost, waiting for restore.');
+        this._contextLost = true;
+        this._scheduleRecovery();
       });
-
-      // Browsers often reclaim GPU resources from backgrounded tabs without
-      // firing webglcontextlost. Check context health when the tab returns.
-      this._onVisibilityChange = () => {
-        if (document.visibilityState !== 'visible' || !this.map) return;
-        const canvas = this.map.getCanvas();
-        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-        if (!gl || gl.isContextLost()) {
-          console.log('WebGL context lost detected on tab visible — reloading.');
-          window.location.reload();
-          return;
-        }
-        // Context alive but tiles may be stale — force repaint
-        this.map.resize();
-        this.map.triggerRepaint();
-      };
-      document.addEventListener('visibilitychange', this._onVisibilityChange);
+      map.on('webglcontextrestored', () => {
+        // mapbox-gl recreated its painter and repaints on its own; stand down.
+        this._contextLost = false;
+        this._clearTimers();
+        this._recreateAttempts = 0;
+      });
     }
 
     map.on('mousedown', (e: MapMouseEvent) => {
@@ -168,9 +189,113 @@ class MapView extends React.Component<
     this.map = map;
     this._contextValue = { map };
     this.setState({ map });
+  };
+
+  _isContextLost(): boolean {
+    if (!this.map) return false;
+    const canvas = this.map.getCanvas();
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    return !gl || gl.isContextLost();
   }
 
+  _scheduleRecovery = () => {
+    if (this._graceTimer != null) return;
+    this._graceTimer = window.setTimeout(() => {
+      this._graceTimer = null;
+      this._recoverIfNeeded();
+    }, MapView.RECOVERY_GRACE_MS);
+  };
+
+  _recoverIfNeeded = () => {
+    if (this._pendingRecreateOpts) {
+      this._tryCreateMap();
+      return;
+    }
+    if (!this.map) return;
+    if (!this._contextLost && !this._isContextLost()) return;
+    if (document.visibilityState !== 'visible') return;
+
+    console.log('MapView: webgl context not restored, recreating map.');
+    // CPU-side transform state, still valid on a lost context. min/max zoom
+    // must be baked into the constructor because Camera applies them only in
+    // componentDidMount and children do not remount on recovery.
+    const center = this.map.getCenter();
+    this._pendingRecreateOpts = {
+      center: [center.lng, center.lat],
+      zoom: this.map.getZoom(),
+      bearing: this.map.getBearing(),
+      pitch: this.map.getPitch(),
+      minZoom: this.map.getMinZoom(),
+      maxZoom: this.map.getMaxZoom(),
+    };
+    try {
+      this.map.remove();
+    } catch {}
+    this.map = null;
+    // Captured from the dead style; recaptured fresh after recreation.
+    this.originalLandColors = [];
+    this.colorOperationInProgress = false;
+    this._tryCreateMap();
+  };
+
+  _tryCreateMap = () => {
+    // Browsers may refuse to create a WebGL context for a hidden tab; the
+    // visibilitychange handler re-enters once the tab is visible again.
+    if (document.visibilityState !== 'visible' && this._pendingRecreateOpts)
+      return;
+    try {
+      this._createMap(this._pendingRecreateOpts ?? undefined);
+      this._pendingRecreateOpts = null;
+      this._contextLost = false;
+      this._recreateAttempts = 0;
+      if (this._lastLandColor) {
+        this.setLandColor(this._lastLandColor);
+      }
+    } catch (e) {
+      if (!this.props.recoverOnContextLost) throw e;
+      console.warn('MapView: map creation failed, will retry.', e);
+      this._recreateAttempts += 1;
+      if (this._recreateAttempts >= MapView.RECOVERY_MAX_ATTEMPTS) {
+        window.location.reload();
+        return;
+      }
+      const delay =
+        MapView.RECOVERY_BACKOFF_MS * 2 ** (this._recreateAttempts - 1);
+      this._retryTimer = window.setTimeout(() => {
+        this._retryTimer = null;
+        this._tryCreateMap();
+      }, delay);
+    }
+  };
+
+  _handleVisibilityChange = () => {
+    if (document.visibilityState !== 'visible') return;
+    if (this._pendingRecreateOpts || !this.map) {
+      this._tryCreateMap();
+      return;
+    }
+    if (this._contextLost || this._isContextLost()) {
+      this._scheduleRecovery();
+      return;
+    }
+    // Context alive but tiles may be stale — force repaint
+    this.map.resize();
+    this.map.triggerRepaint();
+  };
+
+  _clearTimers = () => {
+    if (this._graceTimer != null) {
+      window.clearTimeout(this._graceTimer);
+      this._graceTimer = null;
+    }
+    if (this._retryTimer != null) {
+      window.clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
+  };
+
   componentWillUnmount() {
+    this._clearTimers();
     if (this._onVisibilityChange) {
       document.removeEventListener('visibilitychange', this._onVisibilityChange);
       this._onVisibilityChange = null;
@@ -305,6 +430,8 @@ class MapView extends React.Component<
 
   setLandColor = (color: string) => {
     if (!this.map || !this.mapContainer) return;
+    // Remembered so context-loss recovery can re-tint the recreated map.
+    this._lastLandColor = color;
 
     if (!this.map.isStyleLoaded()) {
       const styleLoadListener = () => {
@@ -319,6 +446,7 @@ class MapView extends React.Component<
   };
 
   resetLandColor = () => {
+    this._lastLandColor = null;
     if (!this.map || !this.mapContainer || this.originalLandColors.length === 0) return;
     this.resetLandColors();
 
