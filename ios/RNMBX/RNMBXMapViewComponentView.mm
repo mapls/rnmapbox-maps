@@ -185,6 +185,11 @@ using namespace facebook::react;
         _view.reactScaleBarPosition = scaleBarPosition;
     }
 
+    id scaleBarUnits = RNMBXConvertFollyDynamicToId(newViewProps.scaleBarUnits);
+    if (scaleBarUnits != nil) {
+        [_view setReactScaleBarUnits:scaleBarUnits];
+    }
+
     RNMBX_REMAP_OPTIONAL_PROP_BOOL(zoomEnabled, reactZoomEnabled)
 
     RNMBX_REMAP_OPTIONAL_PROP_BOOL(scrollEnabled, reactScrollEnabled)
@@ -192,6 +197,11 @@ using namespace facebook::react;
     RNMBX_REMAP_OPTIONAL_PROP_BOOL(rotateEnabled, reactRotateEnabled)
 
     RNMBX_REMAP_OPTIONAL_PROP_BOOL(pitchEnabled, reactPitchEnabled)
+
+    id maxPitch = RNMBXConvertFollyDynamicToId(newViewProps.maxPitch);
+    if (maxPitch != nil) {
+        _view.reactMaxPitch = maxPitch;
+    }
   
     RNMBX_REMAP_OPTIONAL_PROP_NSDictionary(gestureSettings, reactGestureSettings)
 

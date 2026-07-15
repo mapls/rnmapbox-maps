@@ -229,11 +229,30 @@ open class RNMBXMapView: UIView, RCTInvalidating {
 
   var cancelables = Set<AnyCancelable>()
 
+  var pointAnnotationManagers: [RNMBXPointAnnotationManager] = []
+
+  weak var defaultPointAnnotationManagerView: RNMBXPointAnnotationManagerView? = nil
+
   lazy var pointAnnotationManager : RNMBXPointAnnotationManager = {
-    let result = RNMBXPointAnnotationManager(annotations: mapView.annotations, mapView: mapView)
+    let result = RNMBXPointAnnotationManager(annotations: mapView.annotations, mapView: mapView, id: "RNMBX-mapview-point-annotations")
     self._removeMapboxLongPressGestureRecognizer()
+    self.registerPointAnnotationManager(result)
     return result
   }()
+
+  func registerPointAnnotationManager(_ manager: RNMBXPointAnnotationManager) {
+    if !pointAnnotationManagers.contains(where: { $0 === manager }) {
+      pointAnnotationManagers.append(manager)
+    }
+    // We handle taps ourselves; detach Mapbox's built-in tap target for this manager.
+    if let mapView = _mapView {
+      mapView.gestures.singleTapGestureRecognizer.removeTarget(manager.manager, action: nil)
+    }
+  }
+
+  func unregisterPointAnnotationManager(_ manager: RNMBXPointAnnotationManager) {
+    pointAnnotationManagers.removeAll { $0 === manager }
+  }
 
   lazy var calloutAnnotationManager : MapboxMaps.PointAnnotationManager = {
     let manager = mapView.annotations.makePointAnnotationManager(id: "RNMBX-mapview-callouts")
@@ -823,6 +842,7 @@ open class RNMBXMapView: UIView, RCTInvalidating {
   var scaleBarEnabled: Bool? = nil
   var scaleBarPosition: OrnamentPosition? = nil
   var scaleBarMargins: CGPoint? = nil
+  var scaleBarUnits: String? = nil
 
   @objc public func setReactScaleBarEnabled(_ value: Bool) {
     scaleBarEnabled = value
@@ -836,6 +856,11 @@ open class RNMBXMapView: UIView, RCTInvalidating {
     }
   }
 
+  @objc public func setReactScaleBarUnits(_ value: NSString?) {
+    scaleBarUnits = value as? String
+    changed(.scaleBar)
+  }
+
   func applyScaleBar() {
     if let enabled = scaleBarEnabled {
       mapView.ornaments.options.scaleBar.visibility = enabled ? .visible : .hidden
@@ -845,6 +870,16 @@ open class RNMBXMapView: UIView, RCTInvalidating {
     }
     if let margins = scaleBarMargins {
       mapView.ornaments.options.scaleBar.margins = margins
+    }
+    if let units = scaleBarUnits {
+      switch units {
+      case "imperial":
+        mapView.ornaments.options.scaleBar.units = .imperial
+      case "nautical":
+        mapView.ornaments.options.scaleBar.units = .nautical
+      default:
+        mapView.ornaments.options.scaleBar.units = .metric
+      }
     }
   }
 
@@ -1268,7 +1303,10 @@ extension RNMBXMapView {
   func applyOnPress() {
     let singleTapGestureRecognizer = self.mapView.gestures.singleTapGestureRecognizer
 
-    singleTapGestureRecognizer.removeTarget(pointAnnotationManager.manager, action: nil)
+    // Detach Mapbox's built-in tap target for every manager; we handle taps ourselves.
+    for manager in pointAnnotationManagers {
+      singleTapGestureRecognizer.removeTarget(manager.manager, action: nil)
+    }
     singleTapGestureRecognizer.addTarget(self, action: #selector(doHandleTap(_:)))
 
     self.tapDelegate = IgnoreRNMBXMakerViewGestureDelegate(originalDelegate: singleTapGestureRecognizer.delegate)
@@ -1370,13 +1408,34 @@ extension RNMBXMapView: GestureManagerDelegate {
     return event
   }
 
+  private func handleTapAcrossPointAnnotationManagers(_ sender: UITapGestureRecognizer, index: Int, noneFound: @escaping () -> Void) {
+    if index >= pointAnnotationManagers.count {
+      noneFound()
+      return
+    }
+    pointAnnotationManagers[index].handleTap(sender) { _ in
+      self.handleTapAcrossPointAnnotationManagers(sender, index: index + 1, noneFound: noneFound)
+    }
+  }
+
+  @discardableResult
+  func deselectCurrentlySelectedPointAnnotation(deselectAnnotationOnTap: Bool) -> Bool {
+    var any = false
+    for manager in pointAnnotationManagers {
+      if manager.deselectCurrentlySelected(deselectAnnotationOnTap: deselectAnnotationOnTap) {
+        any = true
+      }
+    }
+    return any
+  }
+
   @objc
   func doHandleTap(_ sender: UITapGestureRecognizer) {
     let tapPoint = sender.location(in: self)
-    pointAnnotationManager.handleTap(sender) { (_: UITapGestureRecognizer) in
+    handleTapAcrossPointAnnotationManagers(sender, index: 0) {
       DispatchQueue.main.async {
         if (self.deselectAnnotationOnTap) {
-          if (self.pointAnnotationManager.deselectCurrentlySelected(deselectAnnotationOnTap: true)) {
+          if (self.deselectCurrentlySelectedPointAnnotation(deselectAnnotationOnTap: true)) {
             return
           }
         }
@@ -1419,10 +1478,23 @@ extension RNMBXMapView: GestureManagerDelegate {
     }
   }
 
+  private func handleLongPressAcrossPointAnnotationManagers(_ sender: UILongPressGestureRecognizer, index: Int, noneFound: @escaping () -> Void) {
+    if index >= pointAnnotationManagers.count {
+      noneFound()
+      return
+    }
+    pointAnnotationManagers[index].handleLongPress(sender) { _ in
+      self.handleLongPressAcrossPointAnnotationManagers(sender, index: index + 1, noneFound: noneFound)
+    }
+  }
+
   @objc
   func doHandleLongPress(_ sender: UILongPressGestureRecognizer) {
     let position = sender.location(in: self)
-    pointAnnotationManager.handleLongPress(sender) { (_: UILongPressGestureRecognizer) in
+    handleLongPressAcrossPointAnnotationManagers(sender, index: 0) {
+      // Source-based drag handling only starts on `.began`; annotation drag
+      // continuation (.changed/.ended) is consumed by the owning manager above.
+      guard sender.state == .began else { return }
       DispatchQueue.main.async {
         let draggableSources = self.draggableSources()
         self.doHandleTapInSources(sources: draggableSources, tapPoint: position, hits: [:], touchedSources: []) { (hits, draggedSources) in
@@ -2010,8 +2082,12 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
   var manager : MapboxMaps.PointAnnotationManager
   weak var mapView : MapView? = nil
 
-  init(annotations: AnnotationOrchestrator, mapView: MapView) {
-    manager = annotations.makePointAnnotationManager(id: "RNMBX-mapview-point-annotations")
+  init(annotations: AnnotationOrchestrator, mapView: MapView, id: String? = nil) {
+    if let id = id {
+      manager = annotations.makePointAnnotationManager(id: id)
+    } else {
+      manager = annotations.makePointAnnotationManager()
+    }
     manager.delegate = self
     self.mapView = mapView
   }
@@ -2103,6 +2179,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
 
       case .changed:
           guard var annotation = self.draggedAnnotation else {
+              noAnnotationFound(sender)
               return
           }
 
@@ -2114,6 +2191,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
           }
       case .cancelled, .ended:
         guard let annotation = self.draggedAnnotation else {
+            noAnnotationFound(sender)
             return
         }
         // Optionally notify some other delegate to tell them the drag finished.

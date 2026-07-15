@@ -326,6 +326,11 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
         mapView.setReactScaleBarPosition(mapValue)
     }
 
+    @ReactProp(name = "scaleBarUnits")
+    override fun setScaleBarUnits(mapView: RNMBXMapView, scaleBarUnits: Dynamic) {
+        mapView.setReactScaleBarUnits(scaleBarUnits.asString())
+    }
+
     @ReactProp(name = "compassEnabled")
     override fun setCompassEnabled(mapView: RNMBXMapView, compassEnabled: Dynamic) {
         mapView.setReactCompassEnabled(compassEnabled.asBoolean())
@@ -428,7 +433,7 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
          * onDropViewInstance.
          */
         private fun diposeNativeMapView() {
-            val mapView = mViewManager.getByReactTag(reactTag)
+            val mapView = mViewManager.getByReactTag(getReactTag())
             if (mapView != null) {
                 UiThreadUtil.runOnUiThread {
                     try {

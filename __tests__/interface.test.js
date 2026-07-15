@@ -9,6 +9,7 @@ describe('Public Interface', () => {
       'StyleSheet',
       'Light',
       'PointAnnotation',
+      'PointAnnotationManager',
       'MarkerView',
       'Annotation',
       'Callout',
@@ -44,6 +45,8 @@ describe('Public Interface', () => {
       'SkyLayer',
       'Terrain',
       'Atmosphere',
+      'Snow',
+      'Rain',
 
       // sources
       'VectorSource',

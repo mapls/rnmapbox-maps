@@ -747,7 +747,25 @@
       {
         "name": "bounds",
         "required": false,
-        "type": "intersection",
+        "type": {
+          "name": "shape",
+          "value": [
+            {
+              "name": "ne",
+              "required": true,
+              "type": "Position",
+              "default": "none",
+              "description": "FIX ME NO DESCRIPTION"
+            },
+            {
+              "name": "sw",
+              "required": true,
+              "type": "Position",
+              "default": "none",
+              "description": "FIX ME NO DESCRIPTION"
+            }
+          ]
+        },
         "default": "none",
         "description": "The corners of a box around which the map should bound. Contains padding props for backwards\ncompatibility; the root `padding` prop should be used instead."
       },
@@ -971,7 +989,7 @@
             {
               "name": "animationMode",
               "required": false,
-              "type": "union",
+              "type": "'flyTo' \\| 'easeTo' \\| 'linearTo' \\| 'moveTo' \\| 'none'",
               "default": "none",
               "description": "The easing or path the camera uses to animate to a new configuration."
             }
@@ -2370,6 +2388,22 @@
           "name": "fill-extrusion-line-width",
           "namespace": "paint"
         }
+      },
+      {
+        "name": "fillExtrusionCastShadows",
+        "type": "boolean",
+        "values": [],
+        "default": true,
+        "description": "Enable/Disable shadow casting for this layer",
+        "requires": [],
+        "disabledBy": [],
+        "allowedFunctionTypes": [],
+        "transition": false,
+        "mbx": {
+          "fullName": "paint-fill-extrusion-fill-extrusion-cast-shadows",
+          "name": "fill-extrusion-cast-shadows",
+          "namespace": "paint"
+        }
       }
     ]
   },
@@ -3309,6 +3343,33 @@
           "name": "hillshade-accent-color",
           "namespace": "paint"
         }
+      },
+      {
+        "name": "hillshadeEmissiveStrength",
+        "type": "number",
+        "values": [],
+        "minimum": 0,
+        "units": "intensity",
+        "default": 0,
+        "description": "Controls the intensity of light emitted on the source features.",
+        "requires": [
+          "lights"
+        ],
+        "disabledBy": [],
+        "allowedFunctionTypes": [],
+        "expression": {
+          "interpolated": true,
+          "parameters": [
+            "zoom",
+            "measure-light"
+          ]
+        },
+        "transition": true,
+        "mbx": {
+          "fullName": "paint-hillshade-hillshade-emissive-strength",
+          "name": "hillshade-emissive-strength",
+          "namespace": "paint"
+        }
       }
     ]
   },
@@ -3436,11 +3497,9 @@
           "name": "shape",
           "value": [
             {
-              "name": {
-                "name": "string"
-              },
+              "name": "[key: string]",
               "required": true,
-              "type": "union",
+              "type": "string \\| ImageSourcePropType \\| ImageEntryData",
               "default": "none",
               "description": "FIX ME NO DESCRIPTION"
             }
@@ -3946,6 +4005,34 @@
         }
       },
       {
+        "name": "lineElevationGroundScale",
+        "type": "number",
+        "values": [],
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0,
+        "description": "Controls how much the elevation of lines with `lineElevationReference` set to `sea` scales with terrain exaggeration. A value of 0 keeps the line at a fixed altitude above sea level. A value of 1 scales the elevation proportionally with terrain exaggeration.",
+        "requires": [
+          "lineZOffset"
+        ],
+        "disabledBy": [],
+        "allowedFunctionTypes": [],
+        "expression": {
+          "interpolated": true,
+          "parameters": [
+            "zoom",
+            "feature",
+            "line-progress"
+          ]
+        },
+        "transition": true,
+        "mbx": {
+          "fullName": "layout-line-line-elevation-ground-scale",
+          "name": "line-elevation-ground-scale",
+          "namespace": "layout"
+        }
+      },
+      {
         "name": "lineOpacity",
         "type": "number",
         "values": [],
@@ -4369,7 +4456,8 @@
           "interpolated": true,
           "parameters": [
             "zoom",
-            "measure-light"
+            "measure-light",
+            "line-progress"
           ]
         },
         "transition": true,
@@ -5324,6 +5412,13 @@
         "type": "OrnamentPositonProp",
         "default": "none",
         "description": "[`mapbox` (v10) implementation only] Adds scale bar offset, e.g. `{top: 8, left: 8}` will put the scale bar in top-left corner of the map"
+      },
+      {
+        "name": "scaleBarUnits",
+        "required": false,
+        "type": "'metric' \\| 'imperial' \\| 'nautical'",
+        "default": "none",
+        "description": "Set the scale bar distance units. Defaults to metric."
       },
       {
         "name": "surfaceView",
@@ -6288,11 +6383,9 @@
           "name": "shape",
           "value": [
             {
-              "name": {
-                "name": "string"
-              },
+              "name": "[key: string]",
               "required": true,
-              "type": "union",
+              "type": "string \\| number",
               "default": "none",
               "description": "FIX ME NO DESCRIPTION"
             }
@@ -6456,6 +6549,103 @@
     "fileNameWithExt": "PointAnnotation.tsx",
     "relPath": "src/components/PointAnnotation.tsx",
     "name": "PointAnnotation"
+  },
+  "PointAnnotationManager": {
+    "description": "Configures a PointAnnotation manager. Each PointAnnotationManager owns its own\nannotation layer, so multiple managers can be placed in different `slot`s of the\nMapbox Standard style. Wrap PointAnnotation components as children.\n\nPointAnnotations that are not wrapped in a PointAnnotationManager attach to a\ndefault manager. Use `default` to configure that manager.",
+    "displayName": "PointAnnotationManager",
+    "methods": [],
+    "props": [
+      {
+        "name": "id",
+        "required": false,
+        "type": "string",
+        "default": "none",
+        "description": "A stable Mapbox layer id for this manager's annotation layer.\nWhen omitted, the SDK generates a unique id automatically."
+      },
+      {
+        "name": "default",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "Marks this as the default manager. PointAnnotations that are not wrapped in a\nPointAnnotationManager attach to the default manager, so this lets you configure\nthe slot and properties used by those bare annotations. Only one default manager\nis allowed per MapView."
+      },
+      {
+        "name": "slot",
+        "required": false,
+        "type": "Slot \\| (string & {})",
+        "default": "none",
+        "description": "The slot in the style layer stack to position the annotation layer.\nUse with Mapbox Standard style to control layer ordering."
+      },
+      {
+        "name": "iconAllowOverlap",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "If true, the icon will be visible even if it collides with other previously drawn symbols."
+      },
+      {
+        "name": "iconIgnorePlacement",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "If true, other symbols can be visible even if they collide with the icon."
+      },
+      {
+        "name": "iconOptional",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "If true, text will display without their corresponding icons when the icon collides\nwith other symbols and the text does not."
+      },
+      {
+        "name": "textAllowOverlap",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "If true, the text will be visible even if it collides with other previously drawn symbols."
+      },
+      {
+        "name": "textIgnorePlacement",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "If true, other symbols can be visible even if they collide with the text."
+      },
+      {
+        "name": "textOptional",
+        "required": false,
+        "type": "boolean",
+        "default": "none",
+        "description": "If true, icons will display without their corresponding text when the text collides\nwith other symbols and the icon does not."
+      },
+      {
+        "name": "children",
+        "required": false,
+        "type": "ReactNode",
+        "default": "none",
+        "description": "FIX ME NO DESCRIPTION"
+      }
+    ],
+    "fileNameWithExt": "PointAnnotationManager.tsx",
+    "relPath": "src/components/PointAnnotationManager.tsx",
+    "name": "PointAnnotationManager"
+  },
+  "Rain": {
+    "description": "",
+    "displayName": "Rain",
+    "methods": [],
+    "props": [
+      {
+        "name": "style",
+        "required": false,
+        "type": "RainLayerStyleProps",
+        "default": "none",
+        "description": "Rain particle effect style properties.\n\n@note The default `color` and `vignetteColor` values use `measure-light(\"brightness\")`\nexpressions that are only available in Mapbox Standard-based styles\n(`mapbox://styles/mapbox/standard`, `mapbox://styles/mapbox/standard-satellite`).\nWhen using legacy or custom styles, set `color` and `vignetteColor` explicitly to\navoid \"Brightness is unavailable in the current evaluation context\" warnings and\ninvisible rain. For example: `color=\"#a8adbc\" vignetteColor=\"#464646\"`."
+      }
+    ],
+    "fileNameWithExt": "Rain.tsx",
+    "relPath": "src/components/Rain.tsx",
+    "name": "Rain"
   },
   "RasterArraySource": {
     "description": "RasterArraySource is a map content source that supplies raster array image tiles to be shown on the map.\nThis is typically used for particle animations like wind or precipitation patterns.\nThe location of and metadata about the tiles are defined either by an option dictionary\nor by an external file that conforms to the TileJSON specification.\n\n@experimental This component requires Mapbox Maps SDK v11.4.0 or later",
@@ -7591,6 +7781,13 @@
         "description": "Specifies the maximum zoom level at which to create vector tiles.\nA greater value produces greater detail at high zoom levels.\nThe default value is 18."
       },
       {
+        "name": "minZoomLevel",
+        "required": false,
+        "type": "number",
+        "default": "none",
+        "description": "Specifies the minimum zoom level at which to create vector tiles.\nThe default value is 0."
+      },
+      {
         "name": "buffer",
         "required": false,
         "type": "number",
@@ -7982,6 +8179,23 @@
       }
     ]
   },
+  "Snow": {
+    "description": "",
+    "displayName": "Snow",
+    "methods": [],
+    "props": [
+      {
+        "name": "style",
+        "required": false,
+        "type": "SnowLayerStyleProps",
+        "default": "none",
+        "description": "FIX ME NO DESCRIPTION"
+      }
+    ],
+    "fileNameWithExt": "Snow.tsx",
+    "relPath": "src/components/Snow.tsx",
+    "name": "Snow"
+  },
   "Style": {
     "description": "Style is a component that automatically adds sources / layers to the map using Mapbox GL Style Spec.\nOnly [`sources`](https://docs.mapbox.com/mapbox-gl-js/style-spec/sources) & [`layers`](https://docs.mapbox.com/mapbox-gl-js/style-spec/layers/) are supported.\nOther fields such as `sprites`, `glyphs` etc. will be ignored. Not all layer / source attributes from the style spec are supported, in general the supported attributes will be mentioned under https://github.com/rnmapbox/maps/tree/main/docs.",
     "displayName": "Style",
@@ -8024,18 +8238,177 @@
           "name": "shape",
           "value": [
             {
-              "name": {
-                "name": "string"
-              },
-              "required": true,
+              "name": "lightPreset",
+              "required": false,
+              "type": "'dawn' \\| 'day' \\| 'dusk' \\| 'night'",
+              "default": "none",
+              "description": "Light preset: controls time-of-day lighting"
+            },
+            {
+              "name": "theme",
+              "required": false,
+              "type": "'default' \\| 'faded' \\| 'monochrome'",
+              "default": "none",
+              "description": "Color theme"
+            },
+            {
+              "name": "font",
+              "required": false,
               "type": "string",
               "default": "none",
-              "description": "FIX ME NO DESCRIPTION"
+              "description": "Font family for labels (e.g., 'Montserrat')"
+            },
+            {
+              "name": "show3dObjects",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show generic 3D objects"
+            },
+            {
+              "name": "show3dBuildings",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show extruded 3D buildings"
+            },
+            {
+              "name": "show3dFacades",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show 3D building facades (v11.16+)"
+            },
+            {
+              "name": "show3dLandmarks",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show 3D landmarks (v11.16+)"
+            },
+            {
+              "name": "show3dTrees",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show 3D trees (v11.17+)"
+            },
+            {
+              "name": "showPointOfInterestLabels",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show point of interest labels"
+            },
+            {
+              "name": "showTransitLabels",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show transit labels"
+            },
+            {
+              "name": "showPlaceLabels",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show place labels"
+            },
+            {
+              "name": "showRoadLabels",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show road labels"
+            },
+            {
+              "name": "showPedestrianRoads",
+              "required": false,
+              "type": "boolean",
+              "default": "none",
+              "description": "Show pedestrian roads"
+            },
+            {
+              "name": "colorBuildings",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for buildings (v11.18+)"
+            },
+            {
+              "name": "colorCommercial",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for commercial areas (v11.18+)"
+            },
+            {
+              "name": "colorEducation",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for education areas (v11.18+)"
+            },
+            {
+              "name": "colorIndustrial",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for industrial areas (v11.18+)"
+            },
+            {
+              "name": "colorLand",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for land (v11.18+)"
+            },
+            {
+              "name": "colorMedical",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for medical areas (v11.18+)"
+            },
+            {
+              "name": "colorRoads",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for roads (v11.18+)"
+            },
+            {
+              "name": "colorMotorways",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for motorways (v11.18+)"
+            },
+            {
+              "name": "colorWater",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for water (v11.18+)"
+            },
+            {
+              "name": "colorGreenspaces",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for greenspaces (v11.18+)"
+            },
+            {
+              "name": "colorBoundaries",
+              "required": false,
+              "type": "string",
+              "default": "none",
+              "description": "Color override for boundaries (v11.18+)"
             }
           ]
         },
         "default": "none",
-        "description": "config is a dictionary of configuration options for the style import.\n\nSee https://github.com/mapbox/mapbox-maps-ios/blob/main/Sources/MapboxMaps/Documentation.docc/Migrate%20to%20v11.md#21-the-mapbox-standard-style"
+        "description": "config is a dictionary of configuration options for the style import.\n\nWhen using the Mapbox Standard style with `id=\"basemap\"`, use `StandardStyleConfig`\nkeys for autocomplete. Arbitrary keys are also accepted for forward compatibility.\n\nSee https://github.com/mapbox/mapbox-maps-ios/blob/main/Sources/MapboxMaps/Documentation.docc/Migrate%20to%20v11.md#21-the-mapbox-standard-style"
       }
     ],
     "fileNameWithExt": "StyleImport.tsx",
@@ -9986,6 +10359,69 @@
         "mbx": {
           "fullName": "paint-symbol-icon-color-saturation",
           "name": "icon-color-saturation",
+          "namespace": "paint"
+        }
+      },
+      {
+        "name": "iconColorContrast",
+        "type": "number",
+        "values": [],
+        "minimum": -1,
+        "maximum": 1,
+        "default": 0,
+        "description": "Increase or reduce the contrast of the symbol icon.",
+        "requires": [],
+        "disabledBy": [],
+        "allowedFunctionTypes": [],
+        "expression": {
+          "interpolated": false
+        },
+        "transition": false,
+        "mbx": {
+          "fullName": "paint-symbol-icon-color-contrast",
+          "name": "icon-color-contrast",
+          "namespace": "paint"
+        }
+      },
+      {
+        "name": "iconColorBrightnessMin",
+        "type": "number",
+        "values": [],
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0,
+        "description": "Increase or reduce the brightness of the symbols. The value is the minimum brightness.",
+        "requires": [],
+        "disabledBy": [],
+        "allowedFunctionTypes": [],
+        "expression": {
+          "interpolated": false
+        },
+        "transition": false,
+        "mbx": {
+          "fullName": "paint-symbol-icon-color-brightness-min",
+          "name": "icon-color-brightness-min",
+          "namespace": "paint"
+        }
+      },
+      {
+        "name": "iconColorBrightnessMax",
+        "type": "number",
+        "values": [],
+        "minimum": 0,
+        "maximum": 1,
+        "default": 1,
+        "description": "Increase or reduce the brightness of the symbols. The value is the maximum brightness.",
+        "requires": [],
+        "disabledBy": [],
+        "allowedFunctionTypes": [],
+        "expression": {
+          "interpolated": false
+        },
+        "transition": false,
+        "mbx": {
+          "fullName": "paint-symbol-icon-color-brightness-max",
+          "name": "icon-color-brightness-max",
           "namespace": "paint"
         }
       },

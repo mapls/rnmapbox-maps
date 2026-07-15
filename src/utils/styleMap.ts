@@ -73,6 +73,8 @@ const styleMap = {
   lineZOffset: StyleTypes.Constant,
   lineElevationReference: StyleTypes.Enum,
   lineCrossSlope: StyleTypes.Constant,
+  lineElevationGroundScale: StyleTypes.Constant,
+  lineElevationGroundScaleTransition: StyleTypes.Transition,
   linePatternCrossFade: StyleTypes.Constant,
   lineTrimFadeRange: StyleTypes.Constant,
   lineTrimColor: StyleTypes.Color,
@@ -161,6 +163,9 @@ const styleMap = {
   textOcclusionOpacity: StyleTypes.Constant,
   textOcclusionOpacityTransition: StyleTypes.Transition,
   iconColorSaturation: StyleTypes.Constant,
+  iconColorContrast: StyleTypes.Constant,
+  iconColorBrightnessMin: StyleTypes.Constant,
+  iconColorBrightnessMax: StyleTypes.Constant,
   symbolZOffset: StyleTypes.Constant,
   symbolZOffsetTransition: StyleTypes.Transition,
 
@@ -243,6 +248,7 @@ const styleMap = {
   fillExtrusionEmissiveStrengthTransition: StyleTypes.Transition,
   fillExtrusionLineWidth: StyleTypes.Constant,
   fillExtrusionLineWidthTransition: StyleTypes.Transition,
+  fillExtrusionCastShadows: StyleTypes.Constant,
 
   rasterOpacity: StyleTypes.Constant,
   rasterOpacityTransition: StyleTypes.Transition,
@@ -289,6 +295,8 @@ const styleMap = {
   hillshadeHighlightColorTransition: StyleTypes.Transition,
   hillshadeAccentColor: StyleTypes.Color,
   hillshadeAccentColorTransition: StyleTypes.Transition,
+  hillshadeEmissiveStrength: StyleTypes.Constant,
+  hillshadeEmissiveStrengthTransition: StyleTypes.Transition,
 
   modelAllowDensityReduction: StyleTypes.Constant,
   modelId: StyleTypes.Constant,
@@ -356,6 +364,26 @@ const styleMap = {
   starIntensityTransition: StyleTypes.Transition,
   verticalRange: StyleTypes.Constant,
   verticalRangeTransition: StyleTypes.Transition,
+
+  density: StyleTypes.Constant,
+  densityTransition: StyleTypes.Transition,
+  opacity: StyleTypes.Constant,
+  opacityTransition: StyleTypes.Transition,
+  vignette: StyleTypes.Constant,
+  vignetteTransition: StyleTypes.Transition,
+  vignetteColor: StyleTypes.Color,
+  vignetteColorTransition: StyleTypes.Transition,
+  centerThinning: StyleTypes.Constant,
+  centerThinningTransition: StyleTypes.Transition,
+  direction: StyleTypes.Constant,
+  directionTransition: StyleTypes.Transition,
+  flakeSize: StyleTypes.Constant,
+  flakeSizeTransition: StyleTypes.Transition,
+
+  dropletSize: StyleTypes.Constant,
+  dropletSizeTransition: StyleTypes.Transition,
+  distortionStrength: StyleTypes.Constant,
+  distortionStrengthTransition: StyleTypes.Transition,
 
   exaggeration: StyleTypes.Constant,
 

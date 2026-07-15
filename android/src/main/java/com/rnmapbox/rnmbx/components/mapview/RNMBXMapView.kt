@@ -61,6 +61,7 @@ import com.rnmapbox.rnmbx.utils.extensions.toReadableArray
 import java.util.*
 
 import com.rnmapbox.rnmbx.components.annotation.RNMBXPointAnnotationCoordinator
+import com.rnmapbox.rnmbx.components.annotation.RNMBXPointAnnotationManagerView
 import com.rnmapbox.rnmbx.components.images.ImageManager
 import com.rnmapbox.rnmbx.utils.extensions.toStringKeyPairs
 
@@ -135,16 +136,35 @@ open class RNMBXMapView(private val mContext: Context, var mManager: RNMBXMapVie
 
     private val mSources: MutableMap<String, RNMBXSource<*>>
     private val mImages: MutableList<RNMBXImages>
-    public val pointAnnotations: RNMBXPointAnnotationCoordinator by lazy {
+    val pointAnnotationCoordinators = mutableListOf<RNMBXPointAnnotationCoordinator>()
+    private var pointAnnotationGesturesInited = false
+
+    var defaultPointAnnotationManagerView: RNMBXPointAnnotationManagerView? = null
+
+    private fun ensurePointAnnotationGestures() {
+        if (pointAnnotationGesturesInited) return
         val gesturesPlugin: GesturesPlugin = mapView.gestures
         gesturesPlugin.removeOnMapClickListener(this)
         gesturesPlugin.removeOnMapLongClickListener(this)
-
-        val result = RNMBXPointAnnotationCoordinator(mapView)
-
         gesturesPlugin.addOnMapClickListener(this)
         gesturesPlugin.addOnMapLongClickListener(this)
+        pointAnnotationGesturesInited = true
+    }
 
+    fun registerPointAnnotationCoordinator(coordinator: RNMBXPointAnnotationCoordinator) {
+        ensurePointAnnotationGestures()
+        if (!pointAnnotationCoordinators.contains(coordinator)) {
+            pointAnnotationCoordinators.add(coordinator)
+        }
+    }
+
+    fun unregisterPointAnnotationCoordinator(coordinator: RNMBXPointAnnotationCoordinator) {
+        pointAnnotationCoordinators.remove(coordinator)
+    }
+
+    public val pointAnnotations: RNMBXPointAnnotationCoordinator by lazy {
+        val result = RNMBXPointAnnotationCoordinator(mapView)
+        registerPointAnnotationCoordinator(result)
         result
     }
     private var mProjection: ProjectionName = ProjectionName.MERCATOR
@@ -690,11 +710,17 @@ open class RNMBXMapView(private val mContext: Context, var mManager: RNMBXMapVie
 
     override fun onMapClick(point: Point): Boolean {
         val _this = this
-        if (pointAnnotations.getAndClearAnnotationClicked()) {
+        if (pointAnnotationCoordinators.any { it.getAndClearAnnotationClicked() }) {
             return true
         }
         if (deselectAnnotationOnTap) {
-            if (pointAnnotations.deselectSelectedAnnotation()) {
+            var deselected = false
+            for (coordinator in pointAnnotationCoordinators) {
+                if (coordinator.deselectSelectedAnnotation()) {
+                    deselected = true
+                }
+            }
+            if (deselected) {
                 return true
             }
         }
@@ -728,7 +754,7 @@ open class RNMBXMapView(private val mContext: Context, var mManager: RNMBXMapVie
 
     override fun onMapLongClick(point: Point): Boolean {
         val _this = this
-        if (pointAnnotations.getAndClearAnnotationDragged()) {
+        if (pointAnnotationCoordinators.any { it.getAndClearAnnotationDragged() }) {
             return true
         }
         val screenPointPx = mMap?.pixelForCoordinate(point)
@@ -1357,6 +1383,7 @@ open class RNMBXMapView(private val mContext: Context, var mManager: RNMBXMapVie
     }
 
     var mScaleBarSettings = OrnamentSettings(enabled = false)
+    var mScaleBarUnits: String? = null
 
     fun setReactScaleBarEnabled(scaleBarEnabled: Boolean) {
         mScaleBarSettings.enabled = scaleBarEnabled
@@ -1378,9 +1405,21 @@ open class RNMBXMapView(private val mContext: Context, var mManager: RNMBXMapVie
         changes.add(Property.SCALEBAR)
     }
 
+    fun setReactScaleBarUnits(units: String?) {
+        mScaleBarUnits = units
+        changes.add(Property.SCALEBAR)
+    }
+
     private fun applyScaleBar() {
         mapView.scalebar.updateSettings {
             updateOrnament("scaleBar", mScaleBarSettings, this.toGenericOrnamentSettings())
+            mScaleBarUnits?.let { units ->
+                distanceUnits = when (units) {
+                    "imperial" -> com.mapbox.maps.plugin.DistanceUnits.IMPERIAL
+                    "nautical" -> com.mapbox.maps.plugin.DistanceUnits.NAUTICAL
+                    else -> com.mapbox.maps.plugin.DistanceUnits.METRIC
+                }
+            }
         }
         workaroundToRelayoutChildOfMapView()
     }

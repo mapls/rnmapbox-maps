@@ -3,11 +3,11 @@ import {
   View,
   StyleSheet,
   NativeModules,
-  ViewProps,
-  NativeSyntheticEvent,
-  NativeMethods,
-  HostComponent,
-  LayoutChangeEvent,
+  type ViewProps,
+  type NativeSyntheticEvent,
+  type NativeMethods,
+  type HostComponent,
+  type LayoutChangeEvent,
 } from 'react-native';
 import debounce from 'debounce';
 
@@ -288,6 +288,11 @@ type Props = ViewProps & {
    * [`mapbox` (v10) implementation only] Adds scale bar offset, e.g. `{top: 8, left: 8}` will put the scale bar in top-left corner of the map
    */
   scaleBarPosition?: OrnamentPositonProp;
+
+  /**
+   * Set the scale bar distance units. Defaults to metric.
+   */
+  scaleBarUnits?: 'metric' | 'imperial' | 'nautical';
 
   /**
    * [Android only] Enable/Disable use of GLSurfaceView instead of TextureView.

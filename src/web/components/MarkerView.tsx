@@ -12,7 +12,7 @@ import {
   useRef,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { ViewStyle } from 'react-native';
+import type { ViewStyle } from 'react-native';
 
 import MapContext from '../MapContext';
 
