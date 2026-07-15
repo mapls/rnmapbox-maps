@@ -1,6 +1,11 @@
 import React from 'react';
 import type { Map } from 'mapbox-gl';
 
-const MapContext = React.createContext<{ map?: Map }>({});
+import type { MarkerManager } from './MarkerManager';
+
+const MapContext = React.createContext<{
+  map?: Map;
+  markerManager?: MarkerManager;
+}>({});
 
 export default MapContext;

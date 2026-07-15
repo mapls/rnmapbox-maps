@@ -3,6 +3,7 @@ import mapboxgl, { type MapMouseEvent, type LngLatLike } from 'mapbox-gl';
 
 import type { Position } from '../../types/Position';
 import MapContext from '../MapContext';
+import { MarkerManager } from '../MarkerManager';
 import * as RNMapView from '../../components/MapView';
 
 /**
@@ -47,8 +48,9 @@ class MapView extends React.Component<
     properties: { center: [0, 0], zoom: 0, pitch: 0, heading: 0, bounds: { ne: [0, 0], sw: [0, 0] } },
     gestures: { isGestureActive: false },
   };
+  markerManager: MarkerManager | null = null;
   // Stable context value to avoid re-rendering children unnecessarily
-  _contextValue: { map?: mapboxgl.Map } = {};
+  _contextValue: { map?: mapboxgl.Map; markerManager?: MarkerManager } = {};
   // WebGL context-loss recovery state
   _contextLost = false;
   _graceTimer: number | null = null;
@@ -187,7 +189,8 @@ class MapView extends React.Component<
     });
 
     this.map = map;
-    this._contextValue = { map };
+    this.markerManager = new MarkerManager(map);
+    this._contextValue = { map, markerManager: this.markerManager };
     this.setState({ map });
   };
 
@@ -228,6 +231,8 @@ class MapView extends React.Component<
       minZoom: this.map.getMinZoom(),
       maxZoom: this.map.getMaxZoom(),
     };
+    this.markerManager?.destroy();
+    this.markerManager = null;
     try {
       this.map.remove();
     } catch {}
@@ -296,6 +301,8 @@ class MapView extends React.Component<
 
   componentWillUnmount() {
     this._clearTimers();
+    this.markerManager?.destroy();
+    this.markerManager = null;
     if (this._onVisibilityChange) {
       document.removeEventListener('visibilitychange', this._onVisibilityChange);
       this._onVisibilityChange = null;

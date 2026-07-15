@@ -1,4 +1,3 @@
-import { Marker } from 'mapbox-gl';
 import {
   forwardRef,
   isValidElement,
@@ -15,6 +14,7 @@ import { createPortal } from 'react-dom';
 import type { ViewStyle } from 'react-native';
 
 import MapContext from '../MapContext';
+import type { ManagedMarker, MarkerAnchor } from '../MarkerManager';
 
 type MarkerViewProps = {
   coordinate: [number, number];
@@ -24,7 +24,14 @@ type MarkerViewProps = {
   className?: string;
 };
 
-const xyToAnchorPoint = ({ x, y }: { x: number, y: number }) => {
+/** Minimal imperative surface, API-compatible subset of mapboxgl.Marker. */
+export type MarkerViewRef = {
+  getElement: () => HTMLElement;
+  getLngLat: () => { lng: number; lat: number } | undefined;
+  setLngLat: (lngLat: [number, number]) => void;
+};
+
+const xyToAnchorPoint = ({ x, y }: { x: number; y: number }): MarkerAnchor => {
   if (x < 0 || x > 1 || y < 0 || y > 1) {
     throw new Error('Invalid anchor point');
   }
@@ -90,25 +97,17 @@ const xyToAnchorPoint = ({ x, y }: { x: number, y: number }) => {
   }
 };
 
-function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
-  const { map } = useContext(MapContext);
+function MarkerView(props: MarkerViewProps, ref: Ref<MarkerViewRef>) {
+  const { markerManager } = useContext(MapContext);
+  const markerRef = useRef<ManagedMarker | null>(null);
 
-  // Create marker instance
-  const marker: Marker = useMemo(() => {
-    const _marker = new Marker({
-      anchor: props?.anchor?.x && props?.anchor?.y ? xyToAnchorPoint(props.anchor) : 'center',
-      element: isValidElement(props.children)
-        ? document.createElement('div')
-        : undefined,
-    });
-
-    // Set marker coordinates
-    _marker.setLngLat(props.coordinate);
-
-    if (props.className) _marker.addClassName(props.className);
-
-    // Fix marker position
-    const { style } = _marker.getElement();
+  // Create the marker DOM element once; it survives map recreations so the
+  // portaled children keep their state.
+  const element: HTMLElement = useMemo(() => {
+    const el = document.createElement('div');
+    // Parity with mapboxgl.Marker elements (positioning CSS + selectors).
+    el.className = 'mapboxgl-marker';
+    const { style } = el;
     style.position = 'absolute';
     style.top = '0';
     style.left = '0';
@@ -116,38 +115,79 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
     if (props.style?.zIndex != null) {
       style.zIndex = props.style.zIndex.toString();
     }
-    return _marker;
+    if (props.className) el.classList.add(props.className);
+    if (!isValidElement(props.children)) {
+      // Unlike mapboxgl.Marker there is no default pin; childless markers
+      // render nothing (no consumer relies on the default pin).
+      el.style.display = 'none';
+    }
+    return el;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Add marker to map
+  // Anchor is constructor-only, matching the previous Marker behavior
+  const anchor: MarkerAnchor = useMemo(
+    () =>
+      props?.anchor?.x && props?.anchor?.y
+        ? xyToAnchorPoint(props.anchor)
+        : 'center',
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Latest coordinate for (re)registration without retriggering the effect
+  const coordRef = useRef<{ lng: number; lat: number }>({
+    lng: props.coordinate[0],
+    lat: props.coordinate[1],
+  });
+
+  // Register with the manager; re-runs when the map is recreated after a
+  // WebGL context loss (new manager identity through MapContext).
   useEffect(() => {
-    if (map === undefined) {
+    if (!markerManager) {
       return;
     }
 
-    marker.addTo(map);
+    const marker = markerManager.add(
+      element,
+      [coordRef.current.lng, coordRef.current.lat],
+      anchor,
+    );
+    markerRef.current = marker;
 
     return () => {
+      markerRef.current = null;
       marker.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [markerManager]);
 
-  // Expose marker instance
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useImperativeHandle(ref, () => marker, []);
+  // Expose a stable imperative handle delegating to the current marker
+  useImperativeHandle(
+    ref,
+    () => ({
+      getElement: () => element,
+      getLngLat: () => markerRef.current?.getLngLat(),
+      setLngLat: (lngLat: [number, number]) => {
+        coordRef.current = { lng: lngLat[0], lat: lngLat[1] };
+        markerRef.current?.setLngLat(lngLat);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // Update marker coordinates only when values change
   const lng = props.coordinate[0];
   const lat = props.coordinate[1];
-  const coordRef = useRef<{ lng: number; lat: number }>({ lng, lat });
   const rafRef = useRef<number | null>(null);
   useEffect(() => {
     coordRef.current = { lng, lat };
     if (rafRef.current == null) {
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
+        const marker = markerRef.current;
+        if (!marker) return;
         const { lng: L, lat: A } = coordRef.current;
         const c = marker.getLngLat();
         if (c.lng !== L || c.lat !== A) {
@@ -155,44 +195,56 @@ function MarkerView(props: MarkerViewProps, ref: Ref<Marker>) {
         }
       });
     }
-  }, [marker, lng, lat]);
-  useEffect(() => () => {
-    if (rafRef.current != null) {
-      try { cancelAnimationFrame(rafRef.current); } catch {}
-      rafRef.current = null;
-    }
-  }, []);
+  }, [lng, lat]);
+  useEffect(
+    () => () => {
+      if (rafRef.current != null) {
+        try {
+          cancelAnimationFrame(rafRef.current);
+        } catch {}
+        rafRef.current = null;
+      }
+    },
+    [],
+  );
 
-  // Update className dynamically without recreating marker
+  // Update className dynamically without recreating the marker element
   const prevClassRef = useRef<string | undefined>(props.className);
   useEffect(() => {
     const prev = prevClassRef.current;
     if (prev && prev !== props.className) {
-      try { marker.removeClassName(prev); } catch {}
+      try {
+        element.classList.remove(prev);
+      } catch {}
     }
     if (props.className && props.className !== prev) {
-      try { marker.addClassName(props.className); } catch {}
+      try {
+        element.classList.add(props.className);
+      } catch {}
     }
     prevClassRef.current = props.className;
-  }, [marker, props.className]);
+  }, [element, props.className]);
 
   // Update zIndex dynamically
   const z = props.style?.zIndex;
   const prevZRef = useRef<number | undefined>(z);
   useEffect(() => {
     if (prevZRef.current !== z && z != null) {
-      marker.getElement().style.zIndex = z.toString();
+      element.style.zIndex = z.toString();
       prevZRef.current = z;
     }
-  }, [marker, z]);
+  }, [element, z]);
 
   // Inject children into marker element only if present
-  return props.children ? createPortal(props.children, marker.getElement()) : null;
+  return props.children ? createPortal(props.children, element) : null;
 }
 
 function propsAreEqual(prev: MarkerViewProps, next: MarkerViewProps) {
   // Compare coordinates by value to avoid unnecessary renders
-  if (prev.coordinate[0] !== next.coordinate[0] || prev.coordinate[1] !== next.coordinate[1]) {
+  if (
+    prev.coordinate[0] !== next.coordinate[0] ||
+    prev.coordinate[1] !== next.coordinate[1]
+  ) {
     return false;
   }
   // Compare anchor values if provided
