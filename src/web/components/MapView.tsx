@@ -331,7 +331,10 @@ class MapView extends React.Component<
   }
 
   _setStyleURL = (props: styleURLProps) => {
-    if (this.map && props.styleURL && this.map.isStyleLoaded()) {
+    // Not gated on isStyleLoaded(): that flag is false during the initial
+    // style load, which would silently drop e.g. a theme toggle; mapbox-gl
+    // handles setStyle at any point itself
+    if (this.map && props.styleURL) {
       this.map.setStyle(props.styleURL);
     }
   };

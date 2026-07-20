@@ -3,6 +3,11 @@ import type { GeoJSONSource, GeoJSONSourceSpecification, Map } from 'mapbox-gl';
 
 import MapContext from '../MapContext';
 import SourceContext from '../SourceContext';
+import {
+  isTransientStyleError,
+  warnAttachErrorOnce,
+  warnUnsupportedPropOnce,
+} from '../utils/attachWarning';
 
 const EMPTY_FC: GeoJSON.FeatureCollection = {
   type: 'FeatureCollection',
@@ -29,8 +34,18 @@ type ShapeSourceProps = {
   buffer?: number;
   tolerance?: number;
   lineMetrics?: boolean;
+  /** Accepted for native API parity; not supported on web (warned once). */
+  url?: string;
+  /** Accepted for native API parity; not supported on web (warned once). */
+  existing?: boolean;
+  /** Accepted for native API parity; not supported on web (warned once). */
+  onPress?: (event: unknown) => void;
+  /** Accepted for native API parity; not supported on web (warned once). */
+  hitbox?: { width: number; height: number };
   children?: ReactNode;
 };
+
+const UNSUPPORTED_PROPS = ['url', 'existing', 'onPress', 'hitbox'] as const;
 
 const isMapUsable = (map: Map): boolean => {
   // getStyle() returns undefined after map.remove(); guards cleanups that run
@@ -58,53 +73,71 @@ function ShapeSource(props: ShapeSourceProps) {
   // Latest values for the ensure path without re-running the main effect
   const propsRef = useRef(props);
   propsRef.current = props;
+  // Last GeoJSON handed to mapbox-gl (via addSource or setData); lets the data
+  // effect skip the redundant re-upload right after ensure() created the source
+  const lastUploadedDataRef = useRef<unknown>(null);
 
   useEffect(() => {
     if (!map) return;
 
+    for (const prop of UNSUPPORTED_PROPS) {
+      if (propsRef.current[prop] !== undefined) {
+        warnUnsupportedPropOnce(id, prop, 'it is ignored on the web map');
+      }
+    }
+
     const ensure = () => {
       if (!isMapUsable(map)) return;
       const source = map.getSource(id) as GeoJSONSource | undefined;
-      const data = propsRef.current.shape ?? EMPTY_FC;
-      if (!source) {
-        const current = propsRef.current;
-        const spec: GeoJSONSourceSpecification = {
-          type: 'geojson',
-          data,
-          ...(current.cluster !== undefined && { cluster: current.cluster }),
-          ...(current.clusterRadius !== undefined && {
-            clusterRadius: current.clusterRadius,
-          }),
-          ...(current.clusterMaxZoomLevel !== undefined && {
-            clusterMaxZoom: current.clusterMaxZoomLevel,
-          }),
-          ...(current.clusterProperties !== undefined && {
-            clusterProperties: current.clusterProperties,
-          }),
-          ...(current.maxZoomLevel !== undefined && {
-            maxzoom: current.maxZoomLevel,
-          }),
-          ...(current.buffer !== undefined && { buffer: current.buffer }),
-          ...(current.tolerance !== undefined && {
-            tolerance: current.tolerance,
-          }),
-          ...(current.lineMetrics !== undefined && {
-            lineMetrics: current.lineMetrics,
-          }),
-        };
-        try {
-          map.addSource(id, spec);
-        } catch {
-          // Style JSON not parsed yet; the styledata/idle listeners retry.
-          // Deliberately NOT gated on isStyleLoaded(): that flag flips false on
-          // every style mutation (including our own addSource) and the final
-          // styledata of a load burst can leave it false with no further
-          // styledata coming - gating on it deadlocks the whole attach chain
-          return;
-        }
-      } else {
-        source.setData(data);
+      if (source) {
+        // Already attached: never setData here. These listeners stay
+        // subscribed for style-wipe re-adds, and a setData on idle triggers a
+        // repaint that ends in another idle - a self-sustaining loop
+        // re-uploading the GeoJSON forever. Data updates live in the
+        // dedicated shape effect below.
+        setReady(true);
+        return;
       }
+      const data = propsRef.current.shape ?? EMPTY_FC;
+      const current = propsRef.current;
+      const spec: GeoJSONSourceSpecification = {
+        type: 'geojson',
+        data,
+        ...(current.cluster !== undefined && { cluster: current.cluster }),
+        ...(current.clusterRadius !== undefined && {
+          clusterRadius: current.clusterRadius,
+        }),
+        ...(current.clusterMaxZoomLevel !== undefined && {
+          clusterMaxZoom: current.clusterMaxZoomLevel,
+        }),
+        ...(current.clusterProperties !== undefined && {
+          clusterProperties: current.clusterProperties,
+        }),
+        ...(current.maxZoomLevel !== undefined && {
+          maxzoom: current.maxZoomLevel,
+        }),
+        ...(current.buffer !== undefined && { buffer: current.buffer }),
+        ...(current.tolerance !== undefined && {
+          tolerance: current.tolerance,
+        }),
+        ...(current.lineMetrics !== undefined && {
+          lineMetrics: current.lineMetrics,
+        }),
+      };
+      try {
+        map.addSource(id, spec);
+      } catch (e) {
+        // Style JSON not parsed yet; the styledata/idle listeners retry.
+        // Deliberately NOT gated on isStyleLoaded(): that flag flips false on
+        // every style mutation (including our own addSource) and the final
+        // styledata of a load burst can leave it false with no further
+        // styledata coming - gating on it deadlocks the whole attach chain.
+        // Anything other than the transient not-loaded error is surfaced
+        // once, or a bad spec would retry silently forever
+        if (!isTransientStyleError(e)) warnAttachErrorOnce('source', id, e);
+        return;
+      }
+      lastUploadedDataRef.current = data;
       setReady(true);
     };
 
@@ -141,7 +174,13 @@ function ShapeSource(props: ShapeSourceProps) {
   useEffect(() => {
     if (!map || !isMapUsable(map)) return;
     const source = map.getSource(id) as GeoJSONSource | undefined;
-    source?.setData(shape ?? EMPTY_FC);
+    if (!source) return;
+    const data = shape ?? EMPTY_FC;
+    // Same object ensure() just uploaded via addSource; skip the redundant
+    // full re-upload on mount and after style-wipe re-adds
+    if (data === lastUploadedDataRef.current) return;
+    lastUploadedDataRef.current = data;
+    source.setData(data);
   }, [map, id, shape]);
 
   if (!ready) return null;

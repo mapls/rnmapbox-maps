@@ -62,6 +62,7 @@ const createStubMap = () => {
     fire: (event: string) => {
       for (const handler of [...(listeners.get(event) ?? [])]) handler();
     },
+    listenerCount: (event: string) => listeners.get(event)?.size ?? 0,
     layers,
     sources,
     callOrder,
@@ -188,15 +189,17 @@ describe('web ShapeSource and layers', () => {
 
   it('updates source data when the shape prop changes', () => {
     const map = createStubMap();
-    const { rerender } = render(<JourneyLikeTree map={map} />);
-
-    rerender(
+    // Same element structure on both renders so the source is updated in
+    // place, not remounted
+    const tree = (shape: GeoJSON.Feature | GeoJSON.FeatureCollection) => (
       <MapContext.Provider value={{ map: map as never }}>
-        <ShapeSource id="trail" shape={LINE}>
+        <ShapeSource id="trail" shape={shape}>
           <LineLayer id="trail-line" style={{ lineColor: '#5A5A5A' }} />
         </ShapeSource>
-      </MapContext.Provider>,
+      </MapContext.Provider>
     );
+    const { rerender } = render(tree(FC));
+    rerender(tree(LINE));
 
     expect(map.sources.get('trail')!.setData).toHaveBeenCalledWith(LINE);
   });
@@ -273,6 +276,162 @@ describe('web ShapeSource and layers', () => {
     act(() => map.fire('styledata'));
     expect(map.sources.size).toBe(3);
     expect(map.layers).toHaveLength(4);
+  });
+
+  it('does NOT re-upload data when idle or styledata fire after a successful attach', () => {
+    // Regression: ensure() used to call setData on every styledata/idle event
+    // once the source existed; each setData triggers a repaint that ends in
+    // another idle, so the map re-uploaded the full GeoJSON in a loop forever
+    const map = createStubMap();
+    render(<JourneyLikeTree map={map} />);
+    expect(map.sources.size).toBe(3);
+
+    for (const source of map.sources.values()) {
+      source.setData.mockClear();
+    }
+    act(() => map.fire('idle'));
+    act(() => map.fire('styledata'));
+    act(() => map.fire('idle'));
+
+    for (const source of map.sources.values()) {
+      expect(source.setData).not.toHaveBeenCalled();
+    }
+  });
+
+  it('does not redundantly setData on mount (addSource already carried the data)', () => {
+    const map = createStubMap();
+    render(<JourneyLikeTree map={map} />);
+
+    for (const source of map.sources.values()) {
+      expect(source.setData).not.toHaveBeenCalled();
+    }
+  });
+
+  it('still applies a shape prop change as exactly one setData', () => {
+    const map = createStubMap();
+    const tree = (shape: GeoJSON.Feature | GeoJSON.FeatureCollection) => (
+      <MapContext.Provider value={{ map: map as never }}>
+        <ShapeSource id="trail" shape={shape}>
+          <LineLayer id="trail-line" style={{ lineColor: '#5A5A5A' }} />
+        </ShapeSource>
+      </MapContext.Provider>
+    );
+    const { rerender } = render(tree(FC));
+    rerender(tree(LINE));
+    const setData = map.sources.get('trail')!.setData;
+    expect(setData).toHaveBeenCalledTimes(1);
+    expect(setData).toHaveBeenCalledWith(LINE);
+
+    // Later idle/styledata events do not repeat the upload
+    setData.mockClear();
+    act(() => map.fire('idle'));
+    act(() => map.fire('styledata'));
+    expect(setData).not.toHaveBeenCalled();
+  });
+
+  it('removes its styledata/idle listeners on unmount', () => {
+    const map = createStubMap();
+    const { unmount } = render(<JourneyLikeTree map={map} />);
+    unmount();
+
+    // Every on() registration was matched by an off() with the same handler
+    expect(map.listenerCount('styledata')).toBe(0);
+    expect(map.listenerCount('idle')).toBe(0);
+  });
+
+  it('warns once on a persistent non-transient attach failure and keeps retrying', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const map = createStubMap();
+    map.addSource.mockImplementation(() => {
+      throw new Error('Invalid GeoJSON source specification');
+    });
+
+    render(
+      <MapContext.Provider value={{ map: map as never }}>
+        <ShapeSource id="broken-spec-source" shape={FC} />
+      </MapContext.Provider>,
+    );
+    act(() => map.fire('styledata'));
+    act(() => map.fire('idle'));
+    act(() => map.fire('idle'));
+
+    const attachWarnings = warn.mock.calls.filter((call) =>
+      String(call[0]).includes('"broken-spec-source" failed to attach'),
+    );
+    expect(attachWarnings).toHaveLength(1);
+    // Still retrying: attach succeeds once the underlying problem is gone
+    map.addSource.mockImplementation((id: string) => {
+      map.sources.set(id, { setData: jest.fn() });
+    });
+    act(() => map.fire('idle'));
+    expect(map.sources.has('broken-spec-source')).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('does not warn for the transient style-not-loaded error', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const map = createStubMap();
+    map.styleMutable = false;
+
+    render(
+      <MapContext.Provider value={{ map: map as never }}>
+        <ShapeSource id="pre-parse-source" shape={FC} />
+      </MapContext.Provider>,
+    );
+    act(() => map.fire('styledata'));
+
+    expect(
+      warn.mock.calls.filter((call) =>
+        String(call[0]).includes('pre-parse-source'),
+      ),
+    ).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('warns once for native-only ShapeSource props that web ignores', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const map = createStubMap();
+
+    const tree = (
+      <MapContext.Provider value={{ map: map as never }}>
+        <ShapeSource
+          id="native-parity-source"
+          shape={FC}
+          onPress={() => {}}
+          hitbox={{ width: 44, height: 44 }}
+        />
+      </MapContext.Provider>
+    );
+    const { rerender } = render(tree);
+    rerender(tree);
+
+    const parityWarnings = warn.mock.calls.filter((call) =>
+      String(call[0]).includes('native-parity-source'),
+    );
+    expect(parityWarnings.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining('"onPress"'),
+      expect.stringContaining('"hitbox"'),
+    ]);
+    warn.mockRestore();
+  });
+
+  it('warns when a layer has neither an enclosing ShapeSource nor a sourceID', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const map = createStubMap();
+
+    render(
+      <MapContext.Provider value={{ map: map as never }}>
+        <LineLayer id="orphan-line" style={{ lineColor: '#FFA500' }} />
+      </MapContext.Provider>,
+    );
+
+    expect(
+      warn.mock.calls.filter((call) =>
+        String(call[0]).includes('"orphan-line" has no source'),
+      ),
+    ).toHaveLength(1);
+    expect(map.addLayer).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('recovers from a styledata burst that ends unsettled via the idle listener', () => {

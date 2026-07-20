@@ -10,6 +10,10 @@ import {
   type WebLayerType,
 } from '../utils/layerStyle';
 import type { FilterExpression } from '../../utils/MapboxStyles';
+import {
+  isTransientStyleError,
+  warnAttachErrorOnce,
+} from '../utils/attachWarning';
 
 export type WebLayerProps = {
   id: string;
@@ -62,7 +66,15 @@ export const useWebLayer = (type: WebLayerType, props: WebLayerProps): void => {
   const appliedStyleRef = useRef<SplitStyle | null>(null);
 
   useEffect(() => {
-    if (!map || !source) return;
+    if (!map) return;
+    if (!source) {
+      // Native falls back to the style's default source here; web has no
+      // equivalent, so a layer without a source would otherwise no-op silently
+      console.warn(
+        `Mapbox [web]: layer "${id}" has no source; nest it inside a ShapeSource or pass sourceID`,
+      );
+      return;
+    }
 
     const ensure = () => {
       if (!isMapUsable(map)) return;
@@ -96,9 +108,12 @@ export const useWebLayer = (type: WebLayerType, props: WebLayerProps): void => {
       } as LayerSpecification;
       try {
         map.addLayer(spec, current.belowLayerID);
-      } catch {
+      } catch (e) {
         // Style JSON not parsed yet; the styledata/idle listeners retry. Not
-        // gated on isStyleLoaded() - see ShapeSource for the deadlock rationale
+        // gated on isStyleLoaded() - see ShapeSource for the deadlock
+        // rationale. Non-transient errors (bad spec, missing belowLayerID
+        // that never appears) are surfaced once instead of failing silently
+        if (!isTransientStyleError(e)) warnAttachErrorOnce('layer', id, e);
         return;
       }
       appliedStyleRef.current = split;
