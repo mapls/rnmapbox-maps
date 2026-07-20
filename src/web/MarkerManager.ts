@@ -44,7 +44,10 @@ export class ManagedMarker {
     this._anchorTranslate = ANCHOR_TRANSLATE[anchor];
     // Same classes mapboxgl.Marker applies; app CSS keys pointer-events
     // rules off the anchor class, so dropping it breaks map interaction
-    element.classList.add('mapboxgl-marker', `mapboxgl-marker-anchor-${anchor}`);
+    element.classList.add(
+      'mapboxgl-marker',
+      `mapboxgl-marker-anchor-${anchor}`,
+    );
   }
 
   getElement(): HTMLElement {

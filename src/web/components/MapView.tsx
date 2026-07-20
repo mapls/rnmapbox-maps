@@ -45,7 +45,13 @@ class MapView extends React.Component<
   _onVisibilityChange: (() => void) | null = null;
   // Pre-allocated state objects to avoid per-frame GC pressure
   _moveState: RNMapView.MapState = {
-    properties: { center: [0, 0], zoom: 0, pitch: 0, heading: 0, bounds: { ne: [0, 0], sw: [0, 0] } },
+    properties: {
+      center: [0, 0],
+      zoom: 0,
+      pitch: 0,
+      heading: 0,
+      bounds: { ne: [0, 0], sw: [0, 0] },
+    },
     gestures: { isGestureActive: false },
   };
   markerManager: MarkerManager | null = null;
@@ -304,19 +310,22 @@ class MapView extends React.Component<
     this.markerManager?.destroy();
     this.markerManager = null;
     if (this._onVisibilityChange) {
-      document.removeEventListener('visibilitychange', this._onVisibilityChange);
+      document.removeEventListener(
+        'visibilitychange',
+        this._onVisibilityChange,
+      );
       this._onVisibilityChange = null;
     }
     if (this._rafId != null) {
       try {
         cancelAnimationFrame(this._rafId);
-      } catch { }
+      } catch {}
       this._rafId = null;
     }
     if (this.map) {
       try {
         this.map.remove();
-      } catch { }
+      } catch {}
       this.map = null;
     }
   }
@@ -354,22 +363,22 @@ class MapView extends React.Component<
     };
 
     const layerConfig = {
-      'land': { factor: 1.0 },
-      'landcover': { factor: 0.95 },
+      land: { factor: 1.0 },
+      landcover: { factor: 0.95 },
       'national-park': { factor: 0.9 },
-      'landuse': { factor: 1.05 },
-      'hillshade': { factor: 0.85 },
+      landuse: { factor: 1.05 },
+      hillshade: { factor: 0.85 },
       'land-structure-polygon': { factor: 1.1 },
-      'land-structure-line': { factor: 0.75 }
+      'land-structure-line': { factor: 0.75 },
     };
 
     const landLayerIds = Object.keys(layerConfig);
 
     const captureOriginalColors = this.originalLandColors.length === 0;
 
-    landLayerIds.forEach(layerId => {
+    landLayerIds.forEach((layerId) => {
       if (!this.map) return;
-      const layer = this.map.getStyle().layers.find(l => l.id === layerId);
+      const layer = this.map.getStyle().layers.find((l) => l.id === layerId);
       if (!layer) return;
 
       const { factor } = layerConfig[layerId as keyof typeof layerConfig];
@@ -377,45 +386,59 @@ class MapView extends React.Component<
 
       if (layer.type === 'background') {
         if (captureOriginalColors) {
-          const originalValue = this.map.getPaintProperty(layerId, 'background-color');
+          const originalValue = this.map.getPaintProperty(
+            layerId,
+            'background-color',
+          );
           this.originalLandColors.push({
             layerId,
             property: 'background-color',
-            originalValue
+            originalValue,
           });
         }
         this.map.setPaintProperty(layerId, 'background-color', shadeColor);
-      }
-      else if (layer.type === 'fill') {
+      } else if (layer.type === 'fill') {
         if (captureOriginalColors) {
-          const originalValue = this.map.getPaintProperty(layerId, 'fill-color');
+          const originalValue = this.map.getPaintProperty(
+            layerId,
+            'fill-color',
+          );
           this.originalLandColors.push({
             layerId,
             property: 'fill-color',
-            originalValue
+            originalValue,
           });
         }
         this.map.setPaintProperty(layerId, 'fill-color', shadeColor);
 
-        const outlineColor = this.map?.getPaintProperty(layerId, 'fill-outline-color');
+        const outlineColor = this.map?.getPaintProperty(
+          layerId,
+          'fill-outline-color',
+        );
         if (outlineColor) {
           if (captureOriginalColors) {
             this.originalLandColors.push({
               layerId,
               property: 'fill-outline-color',
-              originalValue: outlineColor
+              originalValue: outlineColor,
             });
           }
-          this.map.setPaintProperty(layerId, 'fill-outline-color', adjustBrightness(shadeColor, 0.8));
+          this.map.setPaintProperty(
+            layerId,
+            'fill-outline-color',
+            adjustBrightness(shadeColor, 0.8),
+          );
         }
-      }
-      else if (layer.type === 'line') {
+      } else if (layer.type === 'line') {
         if (captureOriginalColors) {
-          const originalColor = this.map?.getPaintProperty(layerId, 'line-color');
+          const originalColor = this.map?.getPaintProperty(
+            layerId,
+            'line-color',
+          );
           this.originalLandColors.push({
             layerId,
             property: 'line-color',
-            originalValue: originalColor
+            originalValue: originalColor,
           });
         }
         this.map.setPaintProperty(layerId, 'line-color', shadeColor);
@@ -423,17 +446,21 @@ class MapView extends React.Component<
     });
 
     this.colorOperationInProgress = false;
-  }
+  };
 
   resetLandColors = () => {
     if (!this.map || this.originalLandColors.length === 0) return;
 
-    this.originalLandColors.forEach(item => {
+    this.originalLandColors.forEach((item) => {
       if (this.map?.getLayer(item.layerId)) {
-        (this.map as any).setPaintProperty(item.layerId, item.property, item.originalValue);
+        (this.map as any).setPaintProperty(
+          item.layerId,
+          item.property,
+          item.originalValue,
+        );
       }
     });
-  }
+  };
 
   setLandColor = (color: string) => {
     if (!this.map || !this.mapContainer) return;
@@ -454,7 +481,8 @@ class MapView extends React.Component<
 
   resetLandColor = () => {
     this._lastLandColor = null;
-    if (!this.map || !this.mapContainer || this.originalLandColors.length === 0) return;
+    if (!this.map || !this.mapContainer || this.originalLandColors.length === 0)
+      return;
     this.resetLandColors();
 
     this.originalLandColors = [];
