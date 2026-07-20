@@ -16,7 +16,10 @@ const createStubMap = () => {
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
   const map = {
+    // Emulates mapbox-gl: mutations throw until the stylesheet is parsed
+    styleMutable: true,
     addSource: jest.fn((id: string) => {
+      if (!map.styleMutable) throw new Error('Style is not done loading');
       sources.set(id, { setData: jest.fn() });
       callOrder.push(`addSource:${id}`);
     }),
@@ -32,6 +35,7 @@ const createStubMap = () => {
         layout?: Record<string, unknown>;
         paint?: Record<string, unknown>;
       }) => {
+        if (!map.styleMutable) throw new Error('Style is not done loading');
         layers.push({ id: spec.id, source: spec.source });
         callOrder.push(`addLayer:${spec.id}`);
       },
@@ -259,14 +263,30 @@ describe('web ShapeSource and layers', () => {
     ]);
   });
 
-  it('waits for the style to load before adding anything', () => {
+  it('retries until the stylesheet is parsed instead of gating on isStyleLoaded', () => {
     const map = createStubMap();
-    map.isStyleLoaded.mockReturnValue(false);
+    map.styleMutable = false;
     render(<JourneyLikeTree map={map} />);
-    expect(map.addSource).not.toHaveBeenCalled();
+    expect(map.sources.size).toBe(0);
 
-    map.isStyleLoaded.mockReturnValue(true);
+    map.styleMutable = true;
     act(() => map.fire('styledata'));
+    expect(map.sources.size).toBe(3);
+    expect(map.layers).toHaveLength(4);
+  });
+
+  it('recovers from a styledata burst that ends unsettled via the idle listener', () => {
+    // Regression: isStyleLoaded() flips false on every mutation (including our
+    // own addSource), and the last styledata of a load burst can pass with the
+    // style still dirty; only a later idle re-fires ensure
+    const map = createStubMap();
+    map.styleMutable = false;
+    render(<JourneyLikeTree map={map} />);
+    act(() => map.fire('styledata'));
+    expect(map.sources.size).toBe(0);
+
+    map.styleMutable = true;
+    act(() => map.fire('idle'));
     expect(map.sources.size).toBe(3);
     expect(map.layers).toHaveLength(4);
   });

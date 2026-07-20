@@ -63,7 +63,7 @@ function ShapeSource(props: ShapeSourceProps) {
     if (!map) return;
 
     const ensure = () => {
-      if (!isMapUsable(map) || !map.isStyleLoaded()) return;
+      if (!isMapUsable(map)) return;
       const source = map.getSource(id) as GeoJSONSource | undefined;
       const data = propsRef.current.shape ?? EMPTY_FC;
       if (!source) {
@@ -92,20 +92,32 @@ function ShapeSource(props: ShapeSourceProps) {
             lineMetrics: current.lineMetrics,
           }),
         };
-        map.addSource(id, spec);
+        try {
+          map.addSource(id, spec);
+        } catch {
+          // Style JSON not parsed yet; the styledata/idle listeners retry.
+          // Deliberately NOT gated on isStyleLoaded(): that flag flips false on
+          // every style mutation (including our own addSource) and the final
+          // styledata of a load burst can leave it false with no further
+          // styledata coming - gating on it deadlocks the whole attach chain
+          return;
+        }
       } else {
         source.setData(data);
       }
       setReady(true);
     };
 
-    // styledata covers: initial style load, setStyle wipes, and the first
-    // ensure after WebGL recovery (this effect re-runs on the new map identity)
+    // styledata covers initial style load, setStyle wipes, and the first ensure
+    // after WebGL recovery (this effect re-runs on the new map identity); idle
+    // is the safety net that closes any styledata-burst deadlock window
     map.on('styledata', ensure);
+    map.on('idle', ensure);
     ensure();
 
     return () => {
       map.off('styledata', ensure);
+      map.off('idle', ensure);
       if (!isMapUsable(map)) return;
       try {
         // Remove dependent layers first: this cleanup can run BEFORE child

@@ -65,7 +65,7 @@ export const useWebLayer = (type: WebLayerType, props: WebLayerProps): void => {
     if (!map || !source) return;
 
     const ensure = () => {
-      if (!isMapUsable(map) || !map.isStyleLoaded()) return;
+      if (!isMapUsable(map)) return;
       // The parent source may land a beat later (styledata retriggers this),
       // and after recovery the new map starts empty
       if (!map.getSource(source)) return;
@@ -94,15 +94,23 @@ export const useWebLayer = (type: WebLayerType, props: WebLayerProps): void => {
           maxzoom: current.maxZoomLevel,
         }),
       } as LayerSpecification;
-      map.addLayer(spec, current.belowLayerID);
+      try {
+        map.addLayer(spec, current.belowLayerID);
+      } catch {
+        // Style JSON not parsed yet; the styledata/idle listeners retry. Not
+        // gated on isStyleLoaded() - see ShapeSource for the deadlock rationale
+        return;
+      }
       appliedStyleRef.current = split;
     };
 
     map.on('styledata', ensure);
+    map.on('idle', ensure);
     ensure();
 
     return () => {
       map.off('styledata', ensure);
+      map.off('idle', ensure);
       if (!isMapUsable(map)) return;
       try {
         // Already gone when the parent ShapeSource cleaned up first
