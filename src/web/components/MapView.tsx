@@ -37,7 +37,9 @@ class MapView extends React.Component<
   mapContainer: HTMLElement | null = null;
   map: mapboxgl.Map | null = null;
   originalLandColors: LayerColorState[] = [];
-  colorOperationInProgress = false;
+  // The land tint the map should currently show; null means the style's own
+  // colors. Applied idempotently, so deferred/repeated applies are harmless.
+  _desiredLandColor: string | null = null;
   // rAF throttling for camera updates
   _rafId: number | null = null;
   _pendingMove = false;
@@ -63,7 +65,6 @@ class MapView extends React.Component<
   _retryTimer: number | null = null;
   _recreateAttempts = 0;
   _pendingRecreateOpts: Partial<mapboxgl.MapOptions> | null = null;
-  _lastLandColor: string | null = null;
 
   // Give the browser a chance to fire webglcontextrestored (mapbox-gl fully
   // self-heals on it) before recreating the map ourselves.
@@ -194,6 +195,14 @@ class MapView extends React.Component<
       }
     });
 
+    // Fires on the initial style load and on every setStyle rebuild (and thus
+    // on the first load of a recreated map after context loss). Originals
+    // captured from the previous style are invalid on a fresh one.
+    map.on('style.load', () => {
+      this.originalLandColors = [];
+      this._applyDesiredLandColor();
+    });
+
     this.map = map;
     this.markerManager = new MarkerManager(map);
     this._contextValue = { map, markerManager: this.markerManager };
@@ -245,7 +254,6 @@ class MapView extends React.Component<
     this.map = null;
     // Captured from the dead style; recaptured fresh after recreation.
     this.originalLandColors = [];
-    this.colorOperationInProgress = false;
     this._tryCreateMap();
   };
 
@@ -259,9 +267,6 @@ class MapView extends React.Component<
       this._pendingRecreateOpts = null;
       this._contextLost = false;
       this._recreateAttempts = 0;
-      if (this._lastLandColor) {
-        this.setLandColor(this._lastLandColor);
-      }
     } catch (e) {
       if (!this.props.recoverOnContextLost) throw e;
       console.warn('MapView: map creation failed, will retry.', e);
@@ -336,17 +341,16 @@ class MapView extends React.Component<
     // handles setStyle at any point itself
     if (this.map && props.styleURL) {
       this.map.setStyle(props.styleURL);
+      // A rebuild fires style.load, which re-applies the tint. A successful
+      // diff-mode setStyle fires no style.load yet still resets paint
+      // properties, so re-apply once the diff has settled.
+      this.originalLandColors = [];
+      this.map.once('idle', this._applyDesiredLandColor);
     }
   };
 
   colorLand = (baseColor: string) => {
     if (!this.map) return;
-
-    if (this.colorOperationInProgress) {
-      return;
-    }
-
-    this.colorOperationInProgress = true;
 
     const hexToRgb = (hex: string) => {
       hex = hex.replace(/^#/, '');
@@ -379,9 +383,13 @@ class MapView extends React.Component<
 
     const captureOriginalColors = this.originalLandColors.length === 0;
 
+    // Throws "Style is not done loading" mid style-load; callers go through
+    // _applyDesiredLandColor, which catches and defers to style.load.
+    const styleLayers = this.map.getStyle().layers;
+
     landLayerIds.forEach((layerId) => {
       if (!this.map) return;
-      const layer = this.map.getStyle().layers.find((l) => l.id === layerId);
+      const layer = styleLayers.find((l) => l.id === layerId);
       if (!layer) return;
 
       const { factor } = layerConfig[layerId as keyof typeof layerConfig];
@@ -447,8 +455,6 @@ class MapView extends React.Component<
         this.map.setPaintProperty(layerId, 'line-color', shadeColor);
       }
     });
-
-    this.colorOperationInProgress = false;
   };
 
   resetLandColors = () => {
@@ -465,30 +471,32 @@ class MapView extends React.Component<
     });
   };
 
-  setLandColor = (color: string) => {
-    if (!this.map || !this.mapContainer) return;
-    // Remembered so context-loss recovery can re-tint the recreated map.
-    this._lastLandColor = color;
-
-    if (!this.map.isStyleLoaded()) {
-      const styleLoadListener = () => {
-        this.colorLand(color);
-        this.map?.off('styledata', styleLoadListener);
-      };
-      this.map.on('styledata', styleLoadListener);
-      return;
+  _applyDesiredLandColor = () => {
+    if (!this.map) return;
+    try {
+      if (this._desiredLandColor != null) {
+        this.colorLand(this._desiredLandColor);
+      } else if (this.originalLandColors.length > 0) {
+        this.resetLandColors();
+        this.originalLandColors = [];
+      }
+    } catch (e) {
+      // Expected while the style is mid-load; the style.load handler
+      // re-applies the desired state once it's ready.
+      if (!(e instanceof Error && e.message.includes('not done loading'))) {
+        console.warn('MapView: applying land color failed.', e);
+      }
     }
+  };
 
-    this.colorLand(color);
+  setLandColor = (color: string) => {
+    this._desiredLandColor = color;
+    this._applyDesiredLandColor();
   };
 
   resetLandColor = () => {
-    this._lastLandColor = null;
-    if (!this.map || !this.mapContainer || this.originalLandColors.length === 0)
-      return;
-    this.resetLandColors();
-
-    this.originalLandColors = [];
+    this._desiredLandColor = null;
+    this._applyDesiredLandColor();
   };
 
   setMonochrome = (enabled: boolean) => {
