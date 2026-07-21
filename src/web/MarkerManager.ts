@@ -113,9 +113,14 @@ export class MarkerManager {
     const map = this._map;
     if (!map) return;
     const pos = map.project(marker._lngLat as LngLatLike);
-    // Round like mapbox-gl does: avoids subpixel blur and skips no-op writes.
-    const x = Math.round(pos.x);
-    const y = Math.round(pos.y);
+    // mapbox-gl's Marker only snaps to whole pixels at rest (avoids subpixel
+    // text blur) and keeps subpixel positions while the camera animates so
+    // markers glide in lockstep with the canvas. Rounding during movement
+    // makes every marker hop pixel to pixel against a smoothly interpolating
+    // map, which reads as jitter, amplified on high-dpr phone screens.
+    const snap = !map.isMoving();
+    const x = snap ? Math.round(pos.x) : pos.x;
+    const y = snap ? Math.round(pos.y) : pos.y;
     if (x === marker._lastX && y === marker._lastY) return;
     marker._lastX = x;
     marker._lastY = y;
