@@ -60,7 +60,7 @@ export class ManagedMarker {
 
   setLngLat(lngLat: [number, number]): this {
     this._lngLat = lngLat;
-    this._manager?.reposition(this);
+    this._manager?.repositionMoved(this);
     return this;
   }
 
@@ -81,12 +81,35 @@ export class ManagedMarker {
 export class MarkerManager {
   _map: Map | null;
   _markers = new Set<ManagedMarker>();
-  _onMove = () => this._repositionAll();
+  _snapFrameId: number | null = null;
+  // Mirrors mapboxgl.Marker's delaySnap: every move frame writes exact
+  // subpixel positions so markers glide in lockstep with the canvas, and a
+  // trailing rAF, cancelled by each subsequent move, snaps to whole pixels
+  // only once movement has actually stopped (rounding at rest avoids subpixel
+  // text blur; rounding mid-animation makes markers hop pixel to pixel
+  // against a smoothly interpolating map). Deliberately not keyed on
+  // map.isMoving(): jumpTo fires synchronous move/moveend pairs per call, so
+  // a moveend-triggered snap would re-round every frame of a jumpTo-driven
+  // animation.
+  _onMove = () => {
+    this._repositionAll(false);
+    this._scheduleSnap();
+  };
 
   constructor(map: Map) {
     this._map = map;
     map.on('move', this._onMove);
     map.on('moveend', this._onMove);
+  }
+
+  _scheduleSnap(): void {
+    if (this._snapFrameId != null) {
+      cancelAnimationFrame(this._snapFrameId);
+    }
+    this._snapFrameId = requestAnimationFrame(() => {
+      this._snapFrameId = null;
+      this._repositionAll(true);
+    });
   }
 
   add(
@@ -109,26 +132,36 @@ export class MarkerManager {
     marker._manager = null;
   }
 
-  reposition(marker: ManagedMarker): void {
+  /** Repositions after a coordinate change: exact now, snapped once no more
+   * updates arrive (a per-frame mover like the journey bee must not hop). */
+  repositionMoved(marker: ManagedMarker): void {
+    this.reposition(marker, false);
+    this._scheduleSnap();
+  }
+
+  reposition(marker: ManagedMarker, snap = true): void {
     const map = this._map;
     if (!map) return;
     const pos = map.project(marker._lngLat as LngLatLike);
-    // Round like mapbox-gl does: avoids subpixel blur and skips no-op writes.
-    const x = Math.round(pos.x);
-    const y = Math.round(pos.y);
+    const x = snap ? Math.round(pos.x) : pos.x;
+    const y = snap ? Math.round(pos.y) : pos.y;
     if (x === marker._lastX && y === marker._lastY) return;
     marker._lastX = x;
     marker._lastY = y;
     marker._element.style.transform = `translate3d(${x}px, ${y}px, 0) ${marker._anchorTranslate}`;
   }
 
-  _repositionAll(): void {
+  _repositionAll(snap: boolean): void {
     for (const marker of this._markers) {
-      this.reposition(marker);
+      this.reposition(marker, snap);
     }
   }
 
   destroy(): void {
+    if (this._snapFrameId != null) {
+      cancelAnimationFrame(this._snapFrameId);
+      this._snapFrameId = null;
+    }
     if (this._map) {
       this._map.off('move', this._onMove);
       this._map.off('moveend', this._onMove);
