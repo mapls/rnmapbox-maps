@@ -8,7 +8,7 @@ This is the React Native Mapbox Maps SDK (@rnmapbox/maps) - a community-supporte
 
 ## Prerequisites
 
-- **Node.js**: This project requires Node.js v22.16.0 (see .nvmrc)
+- **Node.js**: This project requires Node.js v22.23.5 (see .nvmrc)
   - The project has been updated to use Node.js 22 with the new import syntax
   - Use `nvm use` to switch to the correct version
 
